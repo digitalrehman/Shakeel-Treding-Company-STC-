@@ -1,8 +1,8 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSelector } from 'react-redux';
-import Main from './Main';
 import LoginScreen from '../screens/auth/LoginScreen';
 import GetStartedScreen from '../screens/GetStartedScreen';
+import BottomTabs from './BottomTabs';
 const Stack = createNativeStackNavigator();
 
 export const Routes = () => {
@@ -10,7 +10,7 @@ export const Routes = () => {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {token ? (
-        <Stack.Screen name="Main" component={Main} />
+         <Stack.Screen name="MainTabs" component={BottomTabs} />
       ) : (
         <>
           <Stack.Screen name="GetStarted" component={GetStartedScreen} />

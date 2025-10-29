@@ -45,7 +45,10 @@ const LoginScreen = ({ navigation }) => {
 
   const loginUser = async () => {
     if (!username.trim()) {
-      Toast.show({ type: 'error', text1: 'Please enter your username or email' });
+      Toast.show({
+        type: 'error',
+        text1: 'Please enter your username or email',
+      });
       return;
     } else if (!password.trim()) {
       Toast.show({ type: 'error', text1: 'Please enter your password' });
@@ -70,7 +73,7 @@ const LoginScreen = ({ navigation }) => {
           text1: 'Login successful!',
           visibilityTime: 1500,
         });
-        navigation.replace('Dashboard');
+        navigation.replace('MainTabs');
       } else {
         Toast.show({
           type: 'error',
@@ -126,7 +129,11 @@ const LoginScreen = ({ navigation }) => {
         >
           {/* Username Input */}
           <View style={styles.inputContainer}>
-            <Icon name="account-outline" size={22} color={colors.primaryLight} />
+            <Icon
+              name="account-outline"
+              size={22}
+              color={colors.primaryLight}
+            />
             <TextInput
               placeholder="Email or Username"
               placeholderTextColor={colors.textSecondary}
@@ -224,15 +231,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.07)',
     width: '88%',
     alignSelf: 'center',
-    padding: 22,
+    padding: 20,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: 'rgba(213,155,67,0.3)',
     shadowColor: colors.primaryDark,
     shadowOpacity: 0.25,
-    shadowOffset: { width: 0, height: 3 },
     shadowRadius: 8,
-    elevation: 6,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -254,7 +259,7 @@ const styles = StyleSheet.create({
   button: {
     borderRadius: 30,
     overflow: 'hidden',
-    marginTop: 20,
+    marginTop: 10,
   },
   gradientBtn: {
     paddingVertical: 14,

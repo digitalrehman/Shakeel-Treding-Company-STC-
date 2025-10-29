@@ -61,12 +61,6 @@ export default function GetStartedScreen({ navigation }) {
         <Text style={styles.subtitle}>
           Elegant Tiles for Modern Homes
         </Text>
-
-        <Text style={styles.description}>
-          Discover a wide range of premium wall and floor tiles designed to bring
-          beauty, strength, and sophistication to your home. From minimal
-          modern to classic luxury — we craft spaces that inspire.
-        </Text>
       </Animated.View>
 
       <TouchableOpacity
@@ -129,13 +123,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 20,
     letterSpacing: 0.5,
-  },
-  description: {
-    fontSize: 15,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    maxWidth: '90%',
   },
   buttonWrapper: {
     position: 'absolute',
