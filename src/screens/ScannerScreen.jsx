@@ -1,13 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import { 
-  StyleSheet, 
-  View, 
-  Text, 
-  Alert, 
+import React, { useEffect, useState, useRef } from 'react';
+import {
+  StyleSheet,
+  View,
+  Text,
   ActivityIndicator,
   TouchableOpacity,
+  BackHandler,
   Modal,
-  ScrollView
+  TextInput,
+  Keyboard,
+  Platform,
+  Vibration,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {
@@ -16,148 +19,325 @@ import {
   useCodeScanner,
 } from 'react-native-vision-camera';
 import { colors } from '../utils/color';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 
 const ScannerScreen = () => {
   const [hasPermission, setHasPermission] = useState(false);
-  const [cameraStatus, setCameraStatus] = useState('Requesting permission...');
-  const [scannedData, setScannedData] = useState(null);
-  const [showDataModal, setShowDataModal] = useState(false);
-  const [scanHistory, setScanHistory] = useState([]);
+  const [cameraStatus, setCameraStatus] = useState(
+    'Requesting camera permission...',
+  );
   const [isScanning, setIsScanning] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [isCameraActive, setIsCameraActive] = useState(true);
+  const [isFlashOn, setIsFlashOn] = useState(false);
+  const [showManualInput, setShowManualInput] = useState(false);
+  const [manualInput, setManualInput] = useState('');
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showCustomAlert, setShowCustomAlert] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({});
 
   const device = useCameraDevice('back');
+  const navigation = useNavigation();
+  const cameraRef = useRef(null);
+  const textInputRef = useRef(null);
 
-  /** ✅ Step 1: Request camera permission */
+  // ✅ Simple and reliable vibration feedback
+  const playBeepSound = () => {
+    try {
+      const vibrationPattern = Platform.OS === 'ios' ? 100 : 200;
+      Vibration.vibrate(vibrationPattern);
+    } catch (error) {
+      console.log('Vibration not available, continuing silently');
+    }
+  };
+
+  // ✅ Custom Alert Modal
+  const showCustomAlertModal = (title, message, onConfirm) => {
+    setAlertConfig({
+      title,
+      message,
+      onConfirm: onConfirm || (() => setShowCustomAlert(false))
+    });
+    setShowCustomAlert(true);
+  };
+
+  // ✅ Camera lifecycle management
+  useFocusEffect(
+    React.useCallback(() => {
+      setIsCameraActive(true);
+      setIsScanning(true);
+      return () => {
+        setIsCameraActive(false);
+      };
+    }, []),
+  );
+
+  // ✅ Auto focus input when modal opens
+  useEffect(() => {
+    if (showManualInput && textInputRef.current) {
+      setTimeout(() => {
+        textInputRef.current?.focus();
+      }, 300);
+    }
+  }, [showManualInput]);
+
+  // ✅ Back button handle karein
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => {
+        if (loading || searchLoading) return true;
+        if (showManualInput) {
+          setShowManualInput(false);
+          setManualInput('');
+          return true;
+        }
+        if (showCustomAlert) {
+          setShowCustomAlert(false);
+          return true;
+        }
+        return false;
+      },
+    );
+    return () => backHandler.remove();
+  }, [loading, showManualInput, searchLoading, showCustomAlert]);
+
+  /** ✅ Request camera permission */
   useEffect(() => {
     const requestPermission = async () => {
       const permission = await Camera.requestCameraPermission();
-      console.log('Camera Permission:', permission);
-
       if (permission === 'granted') {
         setHasPermission(true);
-        setCameraStatus('Camera ready - Point at QR code');
+        setCameraStatus('Align QR code within frame');
       } else {
         setHasPermission(false);
-        setCameraStatus('Permission denied');
-        Alert.alert(
-          'Permission Required',
-          'Please enable camera permission from settings to scan QR codes.',
+        setCameraStatus('Camera permission required');
+        showCustomAlertModal(
+          'Camera Access Required',
+          'Please enable camera permission to scan QR codes'
         );
       }
     };
     requestPermission();
   }, []);
 
-  /** ✅ Step 2: QR scanner with better handling */
+  /** ✅ Flash Toggle Function */
+  const toggleFlash = () => {
+    setIsFlashOn(!isFlashOn);
+  };
+
+  /** ✅ API Call Function with Better Error Handling */
+  const fetchProductData = async (stockId, source = 'scan') => {
+    try {
+      if (source === 'manual') {
+        setSearchLoading(true);
+        Keyboard.dismiss();
+      } else {
+        setLoading(true);
+      }
+      setIsScanning(false);
+
+      const formData = new FormData();
+      formData.append('stock_id', stockId);
+
+      const response = await fetch(
+        'https://t.de2solutions.com/mobile_dash/stc_locations.php',
+        {
+          method: 'POST',
+          body: formData,
+          headers: { Accept: 'application/json' },
+        },
+      );
+
+      const responseText = await response.text();
+
+      if (!responseText || responseText.trim() === '') {
+        throw new Error('Empty response from server');
+      }
+
+      // ✅ Extract JSON from response
+      let jsonString = responseText;
+      if (responseText.includes('/') && responseText.includes('{')) {
+        const jsonStartIndex = responseText.indexOf('{');
+        jsonString = responseText.substring(jsonStartIndex);
+      }
+
+      // ✅ Try to parse JSON
+      let data;
+      try {
+        data = JSON.parse(jsonString);
+      } catch (parseError) {
+        try {
+          const lastBraceIndex = jsonString.lastIndexOf('}');
+          if (lastBraceIndex !== -1) {
+            const fixedJsonString = jsonString.substring(0, lastBraceIndex + 1);
+            data = JSON.parse(fixedJsonString);
+          } else {
+            throw new Error('No valid JSON object found');
+          }
+        } catch {
+          throw new Error('Invalid JSON response from server');
+        }
+      }
+
+      // ✅ Response structure check karein
+      if (data && (data.status === 'true' || data.status_basic === 'true')) {
+        setTimeout(() => {
+          setShowManualInput(false);
+          setManualInput('');
+          navigation.navigate('ProductDetails', {
+            productData: data,
+            stockId: stockId,
+          });
+        }, 1000);
+      } else {
+        // ✅ Data nahi mila - navigate nahi karenge
+        showCustomAlertModal(
+          'Product Not Found',
+          `No product found with Stock ID: "${stockId}"`,
+          () => {
+            setIsScanning(true);
+            if (source === 'manual') {
+              setTimeout(() => textInputRef.current?.focus(), 500);
+            }
+          }
+        );
+      }
+    } catch (error) {
+      showCustomAlertModal(
+        'Request Failed',
+        error.message ||
+          'Failed to fetch product data. Please check your connection and try again.',
+        () => {
+          setIsScanning(true);
+          if (source === 'manual') {
+            setTimeout(() => textInputRef.current?.focus(), 500);
+          }
+        }
+      );
+    } finally {
+      setLoading(false);
+      setSearchLoading(false);
+    }
+  };
+
+  /** ✅ Extract stock_id from scanned data */
+  const extractStockId = scannedData => {
+    const stockIdPattern = /\b\d{3}-\d{4}\b/;
+    const match = scannedData.match(stockIdPattern);
+    if (match) return match[0];
+    if (scannedData.length === 8 && scannedData.includes('-'))
+      return scannedData;
+    return null;
+  };
+
+  /** ✅ Smart Manual Input Handler */
+  const handleManualInputChange = text => {
+    const numbersOnly = text.replace(/[^\d]/g, '');
+    if (numbersOnly.length > 7) return;
+
+    if (numbersOnly.length > 3) {
+      setManualInput(numbersOnly.slice(0, 3) + '-' + numbersOnly.slice(3));
+    } else {
+      setManualInput(numbersOnly);
+    }
+  };
+
+  const handleManualSubmit = () => {
+    if (manualInput.match(/^\d{3}-\d{4}$/)) {
+      fetchProductData(manualInput, 'manual');
+    } else {
+      showCustomAlertModal(
+        'Invalid Format',
+        'Please enter exactly 7 digits in format: 803-1333\n\nFirst 3 digits + hyphen + last 4 digits'
+      );
+    }
+  };
+
+  /** ✅ QR scanner with Beep Sound */
   const codeScanner = useCodeScanner({
     codeTypes: ['qr', 'code-128', 'ean-13'],
-    onCodeScanned: (codes) => {
-      if (codes[0]?.value && isScanning) {
+    onCodeScanned: codes => {
+      if (codes[0]?.value && isScanning && !loading) {
         const scannedValue = codes[0].value;
-        console.log('📱 Scanned QR Code:', scannedValue);
-        
+
+        // ✅ Beep sound play karo
+        playBeepSound();
+
         setIsScanning(false);
-        setScannedData(scannedValue);
-        setScanHistory(prev => [
-          {
-            id: Date.now().toString(),
-            data: scannedValue,
-            timestamp: new Date().toLocaleTimeString(),
-          },
-          ...prev.slice(0, 9)
-        ]);
-        setShowDataModal(true);
-        
-        setTimeout(() => {
-          setIsScanning(true);
-        }, 2000);
+
+        const stockId = extractStockId(scannedValue);
+        if (stockId) {
+          fetchProductData(stockId, 'scan');
+        } else {
+          showCustomAlertModal(
+            'Invalid QR Code',
+            'Scanned QR code does not contain a valid product ID format.',
+            () => setTimeout(() => setIsScanning(true), 1500)
+          );
+        }
       }
     },
   });
 
-  const formatScannedData = (data) => {
-    try {
-      const productCodes = [
-        '803-1333', '803-1323', '803-0127', '830-0011', '803-0121',
-        '830-0009', '830-0010', '815-0180', '815-0177', '815-0127',
-        '815-0141', '815-0152', '815-0116', '815-0143', '815-0033',
-        '815-0157', '815-0160', '815-0119', '815-0154', '815-0158',
-        '815-0145', '815-0042', '815-0159', '815-0099', '815-0083',
-        '815-0077'
-      ];
-      
-      const foundCode = productCodes.find(code => data.includes(code));
-      
-      if (foundCode) {
-        return {
-          type: 'PRODUCT_CODE',
-          code: foundCode,
-          rawData: data,
-          message: '✅ Product Code Identified'
-        };
-      }
-      
-      if (data.startsWith('http')) {
-        return {
-          type: 'URL',
-          code: data,
-          rawData: data,
-          message: '🌐 Website Link'
-        };
-      }
-      
-      // Default text
-      return {
-        type: 'TEXT',
-        code: data,
-        rawData: data,
-        message: '📄 Scanned Text'
-      };
-    } catch (error) {
-      return {
-        type: 'UNKNOWN',
-        code: data,
-        rawData: data,
-        message: '❓ Unknown Format'
-      };
-    }
+  /** ✅ Close Manual Input */
+  const closeManualInput = () => {
+    setShowManualInput(false);
+    setManualInput('');
+    Keyboard.dismiss();
   };
 
-  /** ✅ Handle modal close */
-  const handleCloseModal = () => {
-    setShowDataModal(false);
-    setIsScanning(true);
-  };
+  /** ✅ Custom Alert Modal Component */
+  const CustomAlertModal = () => (
+    <Modal
+      visible={showCustomAlert}
+      animationType="fade"
+      transparent={true}
+      onRequestClose={() => setShowCustomAlert(false)}
+    >
+      <View style={styles.alertModalContainer}>
+        <View style={styles.alertModalContent}>
+          <Ionicons name="warning" size={48} color={colors.primary} style={styles.alertIcon} />
+          <Text style={styles.alertTitle}>{alertConfig.title}</Text>
+          <Text style={styles.alertMessage}>{alertConfig.message}</Text>
+          <TouchableOpacity
+            style={styles.alertButton}
+            onPress={alertConfig.onConfirm}
+          >
+            <Text style={styles.alertButtonText}>OK</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
 
+  /** ✅ Camera not available UI */
   if (!device || !hasPermission) {
     return (
       <View style={styles.center}>
-        <Ionicons name="qr-code-outline" size={72} color={colors.primary} />
+        <Ionicons name="qr-code-outline" size={80} color={colors.primary} />
         <Text style={styles.loadingText}>{cameraStatus}</Text>
         <ActivityIndicator
-          style={{ marginTop: 15 }}
           size="large"
           color={colors.primary}
+          style={{ marginVertical: 20 }}
         />
+
         {!device && hasPermission && (
           <Text style={styles.errorText}>
-            Camera device not found. Trying to access back camera...
+            Camera not available on this device
           </Text>
         )}
-        
-        {/* Scan History Preview */}
-        {scanHistory.length > 0 && (
-          <View style={styles.historyPreview}>
-            <Text style={styles.historyTitle}>Recent Scans:</Text>
-            <ScrollView style={styles.historyList}>
-              {scanHistory.map((item) => (
-                <Text key={item.id} style={styles.historyItem}>
-                  {item.timestamp}: {item.data.substring(0, 30)}...
-                </Text>
-              ))}
-            </ScrollView>
-          </View>
-        )}
+
+        <TouchableOpacity
+          style={styles.manualButton}
+          onPress={() => setShowManualInput(true)}
+        >
+          <Ionicons name="keypad" size={22} color={colors.primary} />
+          <Text style={styles.manualButtonText}>Enter Stock ID Manually</Text>
+        </TouchableOpacity>
+
+        <CustomAlertModal />
       </View>
     );
   }
@@ -166,160 +346,210 @@ const ScannerScreen = () => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Ionicons name="scan" size={28} color={colors.primary} />
-        <Text style={styles.title}>QR Code Scanner</Text>
+        <View style={styles.headerContent}>
+          <Ionicons name="scan" size={26} color={colors.primary} />
+          <Text style={styles.title}>QR Scanner</Text>
+        </View>
       </View>
 
       {/* Scanner Status */}
-      <Text style={styles.statusText}>{cameraStatus}</Text>
+      <Text style={styles.statusText}>
+        {loading ? 'Fetching product details...' : cameraStatus}
+      </Text>
 
       {/* Camera Container */}
       <View style={styles.cameraContainer}>
         <Camera
+          ref={cameraRef}
           style={StyleSheet.absoluteFill}
           device={device}
-          isActive={true}
+          isActive={isCameraActive && !loading && !showManualInput}
           codeScanner={codeScanner}
           zoom={0}
-          enableZoomGesture={true}
+          audio={false}
+          torch={isFlashOn ? 'on' : 'off'}
         />
-        
-        {/* Scanner Frame with Animation */}
+
+        {/* Scanner Frame with Gradient Border */}
         <View style={styles.scannerFrame}>
-          <View style={styles.cornerTL} />
-          <View style={styles.cornerTR} />
-          <View style={styles.cornerBL} />
-          <View style={styles.cornerBR} />
-          
+          <View style={[styles.corner, styles.cornerTL]} />
+          <View style={[styles.corner, styles.cornerTR]} />
+          <View style={[styles.corner, styles.cornerBL]} />
+          <View style={[styles.corner, styles.cornerBR]} />
+
           {/* Scanning Animation Line */}
-          {isScanning && <View style={styles.scanLine} />}
+          {isScanning && !loading && <View style={styles.scanLine} />}
         </View>
-        
-        {/* Scanner Icon in Center */}
-        <View style={styles.scannerIcon}>
-          <Ionicons name="scan-outline" size={50} color="white" />
-        </View>
+
+        {/* Loading Overlay */}
+        {loading && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.loadingOverlayText}>Processing QR Code...</Text>
+          </View>
+        )}
       </View>
 
       {/* Instructions */}
-      <Text style={styles.footer}>
-        Point camera at QR code to scan automatically
-      </Text>
+      <View style={styles.instructionsContainer}>
+        <Text style={styles.instructionText}>
+          Position the QR code within the frame to scan automatically
+        </Text>
+      </View>
 
-      {/* Scan History Button */}
-      {scanHistory.length > 0 && (
-        <TouchableOpacity 
-          style={styles.historyButton}
-          onPress={() => setShowDataModal(true)}
+      {/* Action Buttons */}
+      <View style={styles.buttonsContainer}>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => setShowManualInput(true)}
+          disabled={loading}
         >
-          <Ionicons name="list" size={20} color="white" />
-          <Text style={styles.historyButtonText}>
-            View Scans ({scanHistory.length})
+          <Ionicons name="keypad" size={22} color={colors.primary} />
+          <Text style={styles.actionButtonText}>Manual Input</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.actionButton, isFlashOn && styles.flashActive]}
+          onPress={toggleFlash}
+          disabled={loading}
+        >
+          <Ionicons
+            name={isFlashOn ? 'flashlight' : 'flashlight-outline'}
+            size={22}
+            color={isFlashOn ? colors.text : colors.primary}
+          />
+          <Text
+            style={[
+              styles.actionButtonText,
+              isFlashOn && styles.flashActiveText,
+            ]}
+          >
+            {isFlashOn ? 'Flash On' : 'Flash'}
           </Text>
         </TouchableOpacity>
-      )}
+      </View>
 
-      {/* Scanned Data Modal */}
+      {/* Manual Input Modal */}
       <Modal
-        visible={showDataModal}
-        animationType="slide"
+        visible={showManualInput}
+        animationType="fade"
         transparent={true}
-        onRequestClose={handleCloseModal}
+        statusBarTranslucent={true}
+        onRequestClose={closeManualInput}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
+            {/* Modal Header */}
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Scanned Data</Text>
-              <TouchableOpacity onPress={handleCloseModal}>
-                <Ionicons name="close" size={24} color={colors.text} />
+              <Text style={styles.modalTitle}>Search</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={closeManualInput}
+              >
+                <Ionicons name="close" size={24} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
-            {scannedData && (
-              <View style={styles.dataContainer}>
-                <View style={styles.dataType}>
-                  <Ionicons 
-                    name={formatScannedData(scannedData).type === 'PRODUCT_CODE' ? 'cube' : 'document'} 
-                    size={24} 
-                    color={colors.primary} 
+            <Text style={styles.modalSubtitle}>Enter 7-digit Stock ID</Text>
+
+            {/* Search Input */}
+            <View style={styles.searchContainer}>
+              <Ionicons
+                name="search"
+                size={20}
+                color={colors.textSecondary}
+                style={styles.searchIcon}
+              />
+              <TextInput
+                ref={textInputRef}
+                style={styles.searchInput}
+                placeholder="Enter stock ID..."
+                placeholderTextColor={colors.textSecondary}
+                value={manualInput}
+                onChangeText={handleManualInputChange}
+                keyboardType="number-pad"
+                maxLength={8}
+                autoFocus={true}
+                returnKeyType="search"
+                onSubmitEditing={handleManualSubmit}
+              />
+              {manualInput.length > 0 && (
+                <TouchableOpacity onPress={() => setManualInput('')}>
+                  <Ionicons
+                    name="close-circle"
+                    size={18}
+                    color={colors.textSecondary}
                   />
-                  <Text style={styles.dataTypeText}>
-                    {formatScannedData(scannedData).message}
-                  </Text>
-                </View>
-                
-                <Text style={styles.dataLabel}>Scanned Code:</Text>
-                <Text style={styles.dataValue}>
-                  {formatScannedData(scannedData).code}
-                </Text>
-                
-                <Text style={styles.dataLabel}>Full Data:</Text>
-                <ScrollView style={styles.dataScroll}>
-                  <Text style={styles.dataFullValue}>{scannedData}</Text>
-                </ScrollView>
-              </View>
-            )}
+                </TouchableOpacity>
+              )}
+            </View>
 
-            {/* Scan History in Modal */}
-            {scanHistory.length > 0 && (
-              <View style={styles.historySection}>
-                <Text style={styles.historyTitle}>Scan History:</Text>
-                <ScrollView style={styles.historyList}>
-                  {scanHistory.map((item) => (
-                    <View key={item.id} style={styles.historyItem}>
-                      <Text style={styles.historyTime}>{item.timestamp}</Text>
-                      <Text style={styles.historyData}>{item.data}</Text>
-                    </View>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
-
-            <TouchableOpacity 
-              style={styles.closeButton}
-              onPress={handleCloseModal}
+            {/* Search Button */}
+            <TouchableOpacity
+              style={[
+                styles.searchButton,
+                (!manualInput.match(/^\d{3}-\d{4}$/) || searchLoading) &&
+                  styles.searchButtonDisabled,
+              ]}
+              onPress={handleManualSubmit}
+              disabled={!manualInput.match(/^\d{3}-\d{4}$/) || searchLoading}
             >
-              <Text style={styles.closeButtonText}>Continue Scanning</Text>
+              {searchLoading ? (
+                <ActivityIndicator size="small" color={colors.text} />
+              ) : (
+                <>
+                  <Ionicons name="search" size={18} color={colors.text} />
+                  <Text style={styles.searchButtonText}>Search Product</Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
+
+      <CustomAlertModal />
     </View>
   );
 };
-
-export default ScannerScreen;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
     alignItems: 'center',
-    justifyContent: 'center',
   },
   header: {
+    width: '100%',
+    paddingTop: 60,
+    paddingBottom: 20,
+    paddingHorizontal: 24,
+    backgroundColor: colors.background,
+  },
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    justifyContent: 'center',
   },
   title: {
     fontSize: 24,
     color: colors.text,
     fontWeight: '700',
-    marginLeft: 10,
+    marginLeft: 12,
   },
   statusText: {
     color: colors.textSecondary,
-    fontSize: 14,
-    marginBottom: 20,
+    fontSize: 15,
+    textAlign: 'center',
+    marginBottom: 30,
+    paddingHorizontal: 40,
   },
   cameraContainer: {
-    width: 300,
-    height: 300,
+    width: 280,
+    height: 280,
     overflow: 'hidden',
-    borderRadius: 18,
-    marginVertical: 20,
+    borderRadius: 20,
     position: 'relative',
+    marginBottom: 30,
   },
   scannerFrame: {
     position: 'absolute',
@@ -331,49 +561,39 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.3)',
     borderRadius: 12,
   },
-  cornerTL: {
+  corner: {
     position: 'absolute',
+    width: 25,
+    height: 25,
+    borderColor: colors.primary,
+  },
+  cornerTL: {
     top: -2,
     left: -2,
-    width: 30,
-    height: 30,
-    borderTopWidth: 4,
-    borderLeftWidth: 4,
-    borderColor: colors.primary,
-    borderRadius: 2,
+    borderTopWidth: 3,
+    borderLeftWidth: 3,
+    borderTopLeftRadius: 8,
   },
   cornerTR: {
-    position: 'absolute',
     top: -2,
     right: -2,
-    width: 30,
-    height: 30,
-    borderTopWidth: 4,
-    borderRightWidth: 4,
-    borderColor: colors.primary,
-    borderRadius: 2,
+    borderTopWidth: 3,
+    borderRightWidth: 3,
+    borderTopRightRadius: 8,
   },
   cornerBL: {
-    position: 'absolute',
     bottom: -2,
     left: -2,
-    width: 30,
-    height: 30,
-    borderBottomWidth: 4,
-    borderLeftWidth: 4,
-    borderColor: colors.primary,
-    borderRadius: 2,
+    borderBottomWidth: 3,
+    borderLeftWidth: 3,
+    borderBottomLeftRadius: 8,
   },
   cornerBR: {
-    position: 'absolute',
     bottom: -2,
     right: -2,
-    width: 30,
-    height: 30,
-    borderBottomWidth: 4,
-    borderRightWidth: 4,
-    borderColor: colors.primary,
-    borderRadius: 2,
+    borderBottomWidth: 3,
+    borderRightWidth: 3,
+    borderBottomRightRadius: 8,
   },
   scanLine: {
     position: 'absolute',
@@ -385,160 +605,214 @@ const styles = StyleSheet.create({
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
-    shadowRadius: 10,
-    elevation: 5,
+    shadowRadius: 8,
   },
-  scannerIcon: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    marginLeft: -25,
-    marginTop: -25,
-    opacity: 0.3,
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 20,
   },
-  footer: {
+  loadingOverlayText: {
+    color: 'white',
+    fontSize: 16,
+    marginTop: 12,
+    fontWeight: '600',
+  },
+  instructionsContainer: {
+    paddingHorizontal: 40,
+    marginBottom: 40,
+  },
+  instructionText: {
     color: colors.textSecondary,
     fontSize: 14,
     textAlign: 'center',
-    marginHorizontal: 40,
-    marginBottom: 20,
+    lineHeight: 20,
   },
-  historyButton: {
+  buttonsContainer: {
+    flexDirection: 'row',
+    gap: 16,
+    paddingHorizontal: 24,
+  },
+  actionButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    backgroundColor: colors.card,
+    paddingVertical: 14,
     paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 25,
-    marginTop: 10,
+    borderRadius: 50,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    gap: 8,
   },
-  historyButtonText: {
-    color: 'white',
+  flashActive: {
+    backgroundColor: colors.primary,
+  },
+  actionButtonText: {
+    color: colors.primary,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  flashActiveText: {
+    color: colors.text,
+  },
+  // Manual Input Modal
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    padding: 24,
+    marginHorizontal: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  closeButton: {
+    padding: 4,
+  },
+  modalSubtitle: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    marginBottom: 24,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  searchIcon: {
+    marginRight: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: colors.text,
+    padding: 0,
+  },
+  searchButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 50,
+    gap: 8,
+    marginBottom: 16,
+  },
+  searchButtonDisabled: {
+    backgroundColor: colors.textSecondary,
+    opacity: 0.6,
+  },
+  searchButtonText: {
+    color: colors.text,
     fontSize: 16,
     fontWeight: '600',
-    marginLeft: 8,
+  },
+  // Custom Alert Modal
+  alertModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  alertModalContent: {
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 400,
+  },
+  alertIcon: {
+    marginBottom: 16,
+  },
+  alertTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  alertMessage: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  alertButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    minWidth: 120,
+  },
+  alertButtonText: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   center: {
     flex: 1,
     backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 24,
   },
   loadingText: {
     color: colors.textSecondary,
     fontSize: 16,
-    marginTop: 12,
     textAlign: 'center',
+    marginTop: 16,
+    marginBottom: 8,
   },
   errorText: {
-    color: 'red',
+    color: colors.danger,
     fontSize: 14,
-    marginTop: 10,
     textAlign: 'center',
+    marginBottom: 24,
   },
-  historyPreview: {
-    marginTop: 30,
-    width: '100%',
-    maxHeight: 150,
-  },
-  historyTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 10,
-  },
-  historyList: {
-    maxHeight: 120,
-  },
-  historyItem: {
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    padding: 8,
-    borderRadius: 6,
-    marginBottom: 5,
-  },
-  historyTime: {
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-  historyData: {
-    fontSize: 14,
-    color: colors.text,
-  },
-  // Modal Styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 20,
-    width: '90%',
-    maxHeight: '80%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  dataContainer: {
-    marginBottom: 20,
-  },
-  dataType: {
+  manualButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 15,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 100,
+    gap: 8,
   },
-  dataTypeText: {
-    fontSize: 16,
-    fontWeight: '600',
+  manualButtonText: {
     color: colors.primary,
-    marginLeft: 10,
-  },
-  dataLabel: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginBottom: 5,
-  },
-  dataValue: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 15,
-  },
-  dataScroll: {
-    maxHeight: 100,
-  },
-  dataFullValue: {
-    fontSize: 12,
-    color: colors.text,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    padding: 10,
-    borderRadius: 8,
-  },
-  historySection: {
-    marginTop: 20,
-  },
-  closeButton: {
-    backgroundColor: colors.primary,
-    padding: 15,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  closeButtonText: {
-    color: 'white',
     fontSize: 16,
     fontWeight: '600',
   },
 });
+
+export default ScannerScreen;
