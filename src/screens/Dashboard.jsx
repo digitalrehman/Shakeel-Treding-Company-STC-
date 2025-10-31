@@ -10,20 +10,20 @@ import {
 } from 'react-native';
 import React, { useEffect, useRef } from 'react';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import Icon2 from 'react-native-vector-icons/MaterialIcons'; // You can use same icon family
+import Icon2 from 'react-native-vector-icons/MaterialIcons';
 import { colors } from '../utils/color';
 import { useDispatch } from 'react-redux';
 import { setLogout } from '../store/authSlice';
+import { useNavigation } from '@react-navigation/native'; // ✅ Added
 
 const Dashboard = () => {
   const dispatch = useDispatch();
-  
-  // Animation values
+  const navigation = useNavigation(); // ✅ Added
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
   useEffect(() => {
-    // Start animations when component mounts
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -38,7 +38,6 @@ const Dashboard = () => {
     ]).start();
   }, []);
 
-  // Sample data for cards
   const dashboardCards = [
     {
       id: 2,
@@ -47,6 +46,7 @@ const Dashboard = () => {
       value: '45',
       subtitle: 'Files uploaded',
       color: colors.success,
+      screen: 'UploadPicScreen',
     },
     {
       id: 3,
@@ -55,6 +55,7 @@ const Dashboard = () => {
       value: '₹84,560',
       subtitle: 'Pending amount',
       color: colors.chart,
+      screen: 'Receivable',
     },
     {
       id: 1,
@@ -63,6 +64,7 @@ const Dashboard = () => {
       value: '1,234',
       subtitle: 'Items in stock',
       color: colors.primary,
+      screen: 'Payable',
     },
     {
       id: 4,
@@ -71,6 +73,7 @@ const Dashboard = () => {
       value: '₹2,45,780',
       subtitle: 'Available balance',
       color: colors.primaryLight,
+      screen: 'CashBank',
     },
   ];
 
@@ -79,18 +82,21 @@ const Dashboard = () => {
     { id: 2, title: 'Quotation', icon: 'description' },
   ];
 
+  const handleCardPress = (screenName) => {
+    if (screenName) {
+      navigation.navigate(screenName);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={colors.background} barStyle="light-content" />
 
-      {/* Header Section */}
+      {/* Header */}
       <Animated.View
         style={[
           styles.header,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          },
+          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
         ]}
       >
         <View style={styles.headerLeft}>
@@ -103,13 +109,8 @@ const Dashboard = () => {
               <Text style={styles.badgeText}>3</Text>
             </View>
           </TouchableOpacity>
-          
-          {/* Updated Logout Button */}
           <TouchableOpacity
-            style={[
-              styles.iconCircle,
-              { backgroundColor: 'rgba(255,215,0,0.1)' },
-            ]}
+            style={[styles.iconCircle, { backgroundColor: 'rgba(255,215,0,0.1)' }]}
             onPress={() => dispatch(setLogout())}
           >
             <Icon2 name="logout" size={22} color="#FFD700" />
@@ -122,14 +123,11 @@ const Dashboard = () => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollViewContent}
       >
-        {/* Welcome Section */}
+        {/* Welcome */}
         <Animated.View
           style={[
             styles.welcomeSection,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            },
+            { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
           ]}
         >
           <Text style={styles.welcomeText}>Welcome back!</Text>
@@ -143,47 +141,21 @@ const Dashboard = () => {
           </Text>
         </Animated.View>
 
-        {/* Quick Actions Section - Improved */}
+        {/* Quick Actions */}
         <Animated.View
           style={[
             styles.quickActionsSection,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            },
+            { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
           ]}
         >
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.quickActionsContainer}>
-            {quickActions.map((action, index) => (
-              <Animated.View
-                key={action.id}
-                style={[
-                  styles.quickActionWrapper,
-                  {
-                    opacity: fadeAnim,
-                    transform: [
-                      {
-                        translateY: fadeAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [30, 0],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              >
-                <TouchableOpacity
-                  style={styles.quickActionButton}
-                  activeOpacity={0.7}
-                >
+            {quickActions.map((action) => (
+              <Animated.View key={action.id} style={styles.quickActionWrapper}>
+                <TouchableOpacity style={styles.quickActionButton} activeOpacity={0.7}>
                   <View style={styles.quickActionContent}>
                     <View style={styles.quickActionIcon}>
-                      <Icon
-                        name={action.icon}
-                        size={28}
-                        color={colors.primary}
-                      />
+                      <Icon name={action.icon} size={28} color={colors.primary} />
                     </View>
                     <Text style={styles.quickActionText}>{action.title}</Text>
                   </View>
@@ -193,14 +165,11 @@ const Dashboard = () => {
           </View>
         </Animated.View>
 
-        {/* Dashboard Cards Grid */}
+        {/* Dashboard Cards */}
         <Animated.View
           style={[
             styles.cardsSection,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            },
+            { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
           ]}
         >
           <Text style={styles.sectionTitle}>Overview</Text>
@@ -223,7 +192,12 @@ const Dashboard = () => {
                   },
                 ]}
               >
-                <TouchableOpacity style={styles.card}>
+                {/* ✅ Navigation added here */}
+                <TouchableOpacity
+                  style={styles.card}
+                  onPress={() => handleCardPress(card.screen)}
+                  activeOpacity={0.8}
+                >
                   <View style={styles.cardHeader}>
                     <View
                       style={[
@@ -243,14 +217,11 @@ const Dashboard = () => {
           </View>
         </Animated.View>
 
-        {/* Recent Activity Section */}
+        {/* Recent Activity */}
         <Animated.View
           style={[
             styles.activitySection,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            },
+            { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
           ]}
         >
           <View style={styles.sectionHeader}>
@@ -259,32 +230,13 @@ const Dashboard = () => {
               <Text style={styles.seeAllText}>See All</Text>
             </TouchableOpacity>
           </View>
+
           <View style={styles.activityList}>
-            {[1, 2, 3].map((item, index) => (
-              <Animated.View
-                key={item}
-                style={[
-                  styles.activityItemWrapper,
-                  {
-                    opacity: fadeAnim,
-                    transform: [
-                      {
-                        translateX: fadeAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [-50, 0],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              >
+            {[1, 2, 3].map((item) => (
+              <Animated.View key={item} style={styles.activityItemWrapper}>
                 <View style={styles.activityItem}>
                   <View style={styles.activityIcon}>
-                    <Icon
-                      name="check-circle"
-                      size={20}
-                      color={colors.success}
-                    />
+                    <Icon name="check-circle" size={20} color={colors.success} />
                   </View>
                   <View style={styles.activityContent}>
                     <Text style={styles.activityTitle}>
@@ -299,12 +251,14 @@ const Dashboard = () => {
           </View>
         </Animated.View>
 
-        {/* Extra padding for bottom navigation */}
         <View style={styles.bottomPadding} />
       </ScrollView>
     </SafeAreaView>
   );
 };
+
+export default Dashboard;
+
 
 const styles = StyleSheet.create({
   container: {
@@ -527,5 +481,3 @@ const styles = StyleSheet.create({
     height: 30,
   },
 });
-
-export default Dashboard;

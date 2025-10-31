@@ -4,6 +4,7 @@ import LoginScreen from '../screens/auth/LoginScreen';
 import GetStartedScreen from '../screens/GetStartedScreen';
 import BottomTabs from './BottomTabs';
 import ProductDetailsScreen from '../screens/ProductDetails/ProductDetailsScreen';
+import UploadPicScreen from '../screens/modules/Upload/UploadPicScreen';
 const Stack = createNativeStackNavigator();
 
 export const Routes = () => {
@@ -16,11 +17,10 @@ export const Routes = () => {
           <Stack.Screen
             name="ProductDetails"
             component={ProductDetailsScreen}
-            options={{
-              headerShown: false,
-              presentation: 'card',
-              animation: 'slide_from_right',
-            }}
+          />
+          <Stack.Screen
+            name="UploadPicScreen"
+            component={UploadPicScreen}
           />
         </>
       ) : (
