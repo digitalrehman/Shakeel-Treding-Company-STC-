@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -9,112 +9,204 @@ import {
   Modal,
   Image,
   Dimensions,
-  Alert,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { colors } from '../../../utils/color';
 import CustomHeader from '../../../components/CustomHeader';
+import Toast from 'react-native-toast-message';
+import { launchImageLibrary } from 'react-native-image-picker';
 
 const { width } = Dimensions.get('window');
-
-// Mock data array
-const mockProducts = [
-  {
-    id: 1,
-    name: 'Premium Wooden Chair',
-    pieces: 12,
-    boxes: 2,
-    sq_price: 'Rs. 4,500',
-    packing: 'Carton Box',
-    units: 'PCS',
-    stock_id: 'STK-001',
-  },
-  {
-    id: 2,
-    name: 'Modern Office Desk',
-    pieces: 8,
-    boxes: 1,
-    sq_price: 'Rs. 12,000',
-    packing: 'Wooden Crate',
-    units: 'PCS',
-    stock_id: 'STK-002',
-  },
-  {
-    id: 3,
-    name: 'Luxury Sofa Set',
-    pieces: 4,
-    boxes: 3,
-    sq_price: 'Rs. 25,000',
-    packing: 'Plastic Wrap',
-    units: 'SET',
-    stock_id: 'STK-003',
-  },
-  {
-    id: 4,
-    name: 'Dining Table',
-    pieces: 6,
-    boxes: 2,
-    sq_price: 'Rs. 18,500',
-    packing: 'Bubble Wrap',
-    units: 'PCS',
-    stock_id: 'STK-004',
-  },
-  {
-    id: 5,
-    name: 'Bookshelf Unit',
-    pieces: 10,
-    boxes: 2,
-    sq_price: 'Rs. 8,200',
-    packing: 'Cardboard',
-    units: 'PCS',
-    stock_id: 'STK-005',
-  },
-];
 
 const UploadPicScreen = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+
+  // Fetch products from API
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('https://t.de2solutions.com/mobile_dash/stock_master.php');
+      const result = await response.json();
+      
+      if (result.status === "true" && result.data) {
+        setProducts(result.data);
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Failed to fetch products'
+        });
+      }
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Network request failed'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
 
   // Filter products based on search query
-  const filteredProducts = mockProducts.filter(product =>
-    product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.stock_id.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredProducts = products.filter(product =>
+    product.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    product.stock_id?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleUploadPress = (product) => {
     setSelectedProduct(product);
     setUploadModalVisible(true);
+    setSelectedImage(null);
   };
 
   const handleImageSelect = () => {
-    // Simulate image selection from gallery
-    const mockImageUrl = 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=400&h=300&fit=crop';
-    setSelectedImage(mockImageUrl);
-    Alert.alert('Success', 'Image selected from gallery!');
+    const options = {
+      mediaType: 'photo',
+      quality: 0.8,
+      maxWidth: 1024,
+      maxHeight: 1024,
+    };
+
+    launchImageLibrary(options, (response) => {
+      if (response.didCancel) {
+        Toast.show({
+          type: 'info',
+          text1: 'Cancelled',
+          text2: 'Image selection cancelled'
+        });
+      } else if (response.error) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Failed to select image'
+        });
+      } else if (response.assets && response.assets.length > 0) {
+        const asset = response.assets[0];
+        
+        // File size validation (1MB = 1048576 bytes)
+        if (asset.fileSize > 1048576) {
+          Toast.show({
+            type: 'error',
+            text1: 'Error',
+            text2: 'Image size must be less than 1MB'
+          });
+          return;
+        }
+
+        // File type validation
+        const fileType = asset.type?.toLowerCase();
+        const fileName = asset.fileName?.toLowerCase();
+        if (fileType && !fileType.includes('image/')) {
+          Toast.show({
+            type: 'error',
+            text1: 'Error',
+            text2: 'Only JPG and PNG images are allowed'
+          });
+          return;
+        }
+        if (fileName && !fileName.endsWith('.jpg') && !fileName.endsWith('.jpeg') && !fileName.endsWith('.png')) {
+          Toast.show({
+            type: 'error',
+            text1: 'Error',
+            text2: 'Only JPG and PNG images are allowed'
+          });
+          return;
+        }
+
+        setSelectedImage(asset);
+        Toast.show({
+          type: 'success',
+          text1: 'Success',
+          text2: 'Image selected successfully'
+        });
+      }
+    });
   };
 
-  const handleUpload = () => {
-    if (selectedImage) {
-      // Simulate upload process
-      Alert.alert(
-        'Upload Successful',
-        `Image uploaded for ${selectedProduct.name}`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              setUploadModalVisible(false);
-              setSelectedImage(null);
-              setSelectedProduct(null);
-            }
-          }
-        ]
-      );
-    } else {
-      Alert.alert('Error', 'Please select an image first');
+  const handleUpload = async () => {
+    if (!selectedImage || !selectedProduct) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Please select an image first'
+      });
+      return;
     }
+
+    try {
+      setUploading(true);
+
+      // Create form data
+      const formData = new FormData();
+      
+      // Get file extension from original file name
+      const originalFileName = selectedImage.fileName || 'image.jpg';
+      const fileExtension = originalFileName.split('.').pop();
+      
+      // Create new file name with stock_id
+      const newFileName = `${selectedProduct.stock_id}.${fileExtension}`;
+      
+      // Prepare file object
+      const file = {
+        uri: selectedImage.uri,
+        type: selectedImage.type || 'image/jpeg',
+        name: newFileName,
+      };
+
+      formData.append('stock_id', selectedProduct.stock_id);
+      formData.append('image', file);
+
+      const response = await fetch('https://t.de2solutions.com/company/48/images/', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        Toast.show({
+          type: 'success',
+          text1: 'Success',
+          text2: 'Image uploaded successfully'
+        });
+        
+        setUploadModalVisible(false);
+        setSelectedImage(null);
+        setSelectedProduct(null);
+        
+        // Refresh products list
+        fetchProducts();
+      } else {
+        throw new Error(result.message || 'Upload failed');
+      }
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Upload Failed',
+        text2: error.message || 'Failed to upload image'
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const formatNumber = (number) => {
+    if (number === null || number === undefined) return '0';
+    return Number(number).toString().replace(/\.0+$/, '');
   };
 
   return (
@@ -150,19 +242,28 @@ const UploadPicScreen = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <Text style={styles.resultsText}>
-          {filteredProducts.length} products found
-        </Text>
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading products...</Text>
+          </View>
+        ) : (
+          <>
+            <Text style={styles.resultsText}>
+              {filteredProducts.length} products found
+            </Text>
 
-        <View style={styles.productsGrid}>
-          {filteredProducts.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              onUploadPress={handleUploadPress}
-            />
-          ))}
-        </View>
+            <View style={styles.productsGrid}>
+              {filteredProducts.map((product, index) => (
+                <ProductCard
+                  key={product.stock_id || index}
+                  product={product}
+                  onUploadPress={handleUploadPress}
+                  formatNumber={formatNumber}
+                />
+              ))}
+            </View>
+          </>
+        )}
       </ScrollView>
 
       {/* Upload Modal */}
@@ -180,6 +281,7 @@ const UploadPicScreen = ({ navigation }) => {
               <TouchableOpacity 
                 onPress={() => setUploadModalVisible(false)}
                 style={styles.closeButton}
+                disabled={uploading}
               >
                 <Ionicons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
@@ -188,7 +290,7 @@ const UploadPicScreen = ({ navigation }) => {
             {/* Product Info */}
             {selectedProduct && (
               <View style={styles.modalProductInfo}>
-                <Text style={styles.productName}>{selectedProduct.name}</Text>
+                <Text style={styles.productName}>{selectedProduct.description}</Text>
                 <Text style={styles.stockId}>{selectedProduct.stock_id}</Text>
               </View>
             )}
@@ -197,7 +299,7 @@ const UploadPicScreen = ({ navigation }) => {
             <View style={styles.imageSection}>
               {selectedImage ? (
                 <Image 
-                  source={{ uri: selectedImage }} 
+                  source={{ uri: selectedImage.uri }} 
                   style={styles.previewImage}
                   resizeMode="cover"
                 />
@@ -214,35 +316,42 @@ const UploadPicScreen = ({ navigation }) => {
               <TouchableOpacity 
                 style={[styles.button, styles.selectButton]}
                 onPress={handleImageSelect}
+                disabled={uploading}
               >
                 <Ionicons name="images-outline" size={20} color={colors.text} />
-                <Text style={styles.buttonText}>Select from Gallery</Text>
+                <Text style={styles.buttonText}>
+                  {uploading ? 'Uploading...' : 'Select from Gallery'}
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity 
-                style={[styles.button, styles.uploadButton, !selectedImage && styles.disabledButton]}
+                style={[styles.button, styles.uploadButton, (!selectedImage || uploading) && styles.disabledButton]}
                 onPress={handleUpload}
-                disabled={!selectedImage}
+                disabled={!selectedImage || uploading}
               >
                 <Ionicons name="cloud-upload-outline" size={20} color={colors.text} />
-                <Text style={styles.buttonText}>Upload Image</Text>
+                <Text style={styles.buttonText}>
+                  {uploading ? 'Uploading...' : 'Upload Image'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
+
+      <Toast />
     </View>
   );
 };
 
 // Product Card Component
-const ProductCard = ({ product, onUploadPress }) => (
+const ProductCard = ({ product, onUploadPress, formatNumber }) => (
   <View style={styles.productCard}>
     {/* Card Header */}
     <View style={styles.cardHeader}>
       <View style={styles.cardProductInfo}>
         <Text style={styles.productName} numberOfLines={2}>
-          {product.name}
+          {product.description || 'No Description'}
         </Text>
         <Text style={styles.stockId}>{product.stock_id}</Text>
       </View>
@@ -261,13 +370,13 @@ const ProductCard = ({ product, onUploadPress }) => (
     <View style={styles.detailsGrid}>
       {/* First Row */}
       <View style={styles.detailRow}>
-        <DetailItem label="Pieces" value={product.pieces} />
-        <DetailItem label="Boxes" value={product.boxes} />
-        <DetailItem label="SQ Price" value={product.sq_price} />
+        <DetailItem label="Pieces" value={formatNumber(product.Pcs)} />
+        <DetailItem label="Boxes" value={formatNumber(product.boxes)} />
+        <DetailItem label="SQ Price" value={`Rs. ${formatNumber(product.sq_price)}`} />
       </View>
       {/* Second Row */}
       <View style={styles.detailRow}>
-        <DetailItem label="Packing" value={product.packing} />
+        <DetailItem label="Packing" value={formatNumber(product.packing)} />
         <DetailItem label="Units" value={product.units} />
         <View style={styles.emptyItem} />
       </View>
@@ -317,6 +426,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginLeft: 12,
     marginRight: 8,
+  },
+  // Loading Container
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: colors.textSecondary,
   },
   // Scroll View
   scrollView: {
