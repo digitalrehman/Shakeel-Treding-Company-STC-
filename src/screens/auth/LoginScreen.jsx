@@ -15,8 +15,8 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Toast from 'react-native-toast-message';
 import { useDispatch, useSelector } from 'react-redux';
 import { colors } from '../../utils/color';
-import api from '../../utils/api';
 import { CurrentLogin, setLoader } from '../../store/authSlice';
+import { API_URL } from '@env';
 
 const LoginScreen = ({ navigation }) => {
   const [username, setUsername] = useState('');
@@ -59,7 +59,7 @@ const LoginScreen = ({ navigation }) => {
     const config = {
       method: 'get',
       maxBodyLength: Infinity,
-      url: `${api.baseURL}users.php`,
+      url: `${API_URL}users.php`,
       headers: {},
     };
 

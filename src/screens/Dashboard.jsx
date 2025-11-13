@@ -4,21 +4,20 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   Animated,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useEffect, useRef } from 'react';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import Icon2 from 'react-native-vector-icons/MaterialIcons';
 import { colors } from '../utils/color';
 import { useDispatch } from 'react-redux';
 import { setLogout } from '../store/authSlice';
-import { useNavigation } from '@react-navigation/native'; // ✅ Added
-
+import { useNavigation } from '@react-navigation/native'; 
 const Dashboard = () => {
   const dispatch = useDispatch();
-  const navigation = useNavigation(); // ✅ Added
+  const navigation = useNavigation(); 
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;

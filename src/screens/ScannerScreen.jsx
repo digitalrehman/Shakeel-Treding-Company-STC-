@@ -20,8 +20,10 @@ import {
 } from 'react-native-vision-camera';
 import { colors } from '../utils/color';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { API_URL } from '@env';
 
 const ScannerScreen = () => {
+
   const [hasPermission, setHasPermission] = useState(false);
   const [cameraStatus, setCameraStatus] = useState(
     'Requesting camera permission...',
@@ -56,7 +58,7 @@ const ScannerScreen = () => {
     setAlertConfig({
       title,
       message,
-      onConfirm: onConfirm || (() => setShowCustomAlert(false))
+      onConfirm: onConfirm || (() => setShowCustomAlert(false)),
     });
     setShowCustomAlert(true);
   };
@@ -114,7 +116,7 @@ const ScannerScreen = () => {
         setCameraStatus('Camera permission required');
         showCustomAlertModal(
           'Camera Access Required',
-          'Please enable camera permission to scan QR codes'
+          'Please enable camera permission to scan QR codes',
         );
       }
     };
@@ -141,7 +143,7 @@ const ScannerScreen = () => {
       formData.append('stock_id', stockId);
 
       const response = await fetch(
-        'https://t.de2solutions.com/mobile_dash/stc_locations.php',
+        `${API_URL}stc_locations.php`,
         {
           method: 'POST',
           body: formData,
@@ -200,7 +202,7 @@ const ScannerScreen = () => {
             if (source === 'manual') {
               setTimeout(() => textInputRef.current?.focus(), 500);
             }
-          }
+          },
         );
       }
     } catch (error) {
@@ -213,7 +215,7 @@ const ScannerScreen = () => {
           if (source === 'manual') {
             setTimeout(() => textInputRef.current?.focus(), 500);
           }
-        }
+        },
       );
     } finally {
       setLoading(false);
@@ -249,7 +251,7 @@ const ScannerScreen = () => {
     } else {
       showCustomAlertModal(
         'Invalid Format',
-        'Please enter exactly 7 digits in format: 803-1333\n\nFirst 3 digits + hyphen + last 4 digits'
+        'Please enter exactly 7 digits in format: 803-1333\n\nFirst 3 digits + hyphen + last 4 digits',
       );
     }
   };
@@ -273,7 +275,7 @@ const ScannerScreen = () => {
           showCustomAlertModal(
             'Invalid QR Code',
             'Scanned QR code does not contain a valid product ID format.',
-            () => setTimeout(() => setIsScanning(true), 1500)
+            () => setTimeout(() => setIsScanning(true), 1500),
           );
         }
       }
@@ -297,7 +299,12 @@ const ScannerScreen = () => {
     >
       <View style={styles.alertModalContainer}>
         <View style={styles.alertModalContent}>
-          <Ionicons name="warning" size={48} color={colors.primary} style={styles.alertIcon} />
+          <Ionicons
+            name="warning"
+            size={48}
+            color={colors.primary}
+            style={styles.alertIcon}
+          />
           <Text style={styles.alertTitle}>{alertConfig.title}</Text>
           <Text style={styles.alertMessage}>{alertConfig.message}</Text>
           <TouchableOpacity

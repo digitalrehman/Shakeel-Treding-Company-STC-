@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -14,9 +14,45 @@ const { width } = Dimensions.get('window');
 
 const ProductDetailsScreen = ({ route, navigation }) => {
   const { productData, stockId } = route.params;
-  const basicInfo = productData.data_basic?.[0] || {};
+  const basicInfo = productData.data_basic || {};
   const locations = productData.data || [];
   const showroomData = productData.data_show || [];
+  
+  // Current date and time state
+  const [currentDateTime, setCurrentDateTime] = useState('');
+
+  // Function to format date and time
+  const getFormattedDateTime = () => {
+    const now = new Date();
+    
+    // Format date as dd/mm/yyyy
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = now.getFullYear();
+    const formattedDate = `${day}/${month}/${year}`;
+    
+    // Format time as 12-hour format
+    let hours = now.getHours();
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    
+    hours = hours % 12;
+    hours = hours ? hours : 12; // the hour '0' should be '12'
+    const formattedTime = `${hours}:${minutes} ${ampm}`;
+    
+    return `${formattedDate} ${formattedTime}`;
+  };
+
+  // Update date and time every second
+  useEffect(() => {
+    setCurrentDateTime(getFormattedDateTime());
+    
+    const interval = setInterval(() => {
+      setCurrentDateTime(getFormattedDateTime());
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Alternative static image URL
   const productImage =
@@ -29,12 +65,19 @@ const ProductDetailsScreen = ({ route, navigation }) => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* 1st Section: Product Title */}
+        {/* 1st Section: Product Title with Date & Time */}
         <View style={styles.titleSection}>
           <Text style={styles.productTitle} numberOfLines={2}>
             {basicInfo.description || 'Product Name'}
           </Text>
           <Text style={styles.stockId}>Stock ID: {stockId}</Text>
+          {/* Current Date and Time Display */}
+          <View style={styles.dateTimeContainer}>
+            <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
+            <Text style={styles.dateTimeText}>
+              {currentDateTime}
+            </Text>
+          </View>
         </View>
 
         {/* 2nd Section: Stock Locations */}
@@ -253,6 +296,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.primary,
     fontWeight: '600',
+    marginBottom: 8,
+  },
+  // Date Time Container
+  dateTimeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  dateTimeText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginLeft: 6,
+    fontWeight: '500',
   },
   // Details Section - 4th section
   detailsSection: {
