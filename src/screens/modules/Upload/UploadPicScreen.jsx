@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -8,15 +8,14 @@ import {
   TouchableOpacity,
   Modal,
   Image,
-  Dimensions,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { colors } from '../../../utils/color';
 import CustomHeader from '../../../components/CustomHeader';
 import Toast from 'react-native-toast-message';
 import { launchImageLibrary } from 'react-native-image-picker';
-
-const { width } = Dimensions.get('window');
+import { API_URL } from '@env';
 
 const UploadPicScreen = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -26,51 +25,113 @@ const UploadPicScreen = ({ navigation }) => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [imageSelecting, setImageSelecting] = useState(false);
+  const [imageValidationError, setImageValidationError] = useState('');
 
-  // Fetch products from API
-  const fetchProducts = async () => {
+  // Fetch products from API with caching
+  const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch('https://t.de2solutions.com/mobile_dash/stock_master.php');
+
+      // Load cached data instantly
+      const cachedData = await AsyncStorage.getItem('products_cache');
+      if (cachedData) {
+        setProducts(JSON.parse(cachedData));
+      }
+
+      const response = await fetch(`${API_URL}stock_master.php`);
       const result = await response.json();
-      
-      if (result.status === "true" && result.data) {
+
+      if (result.status === 'true' && result.data) {
         setProducts(result.data);
+        await AsyncStorage.setItem(
+          'products_cache',
+          JSON.stringify(result.data),
+        );
       } else {
         Toast.show({
           type: 'error',
           text1: 'Error',
-          text2: 'Failed to fetch products'
+          text2: 'Failed to fetch products',
         });
       }
     } catch (error) {
       Toast.show({
         type: 'error',
         text1: 'Error',
-        text2: 'Network request failed'
+        text2: 'Network request failed',
       });
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchProducts();
-  }, []);
+  }, [fetchProducts]);
 
   // Filter products based on search query
-  const filteredProducts = products.filter(product =>
-    product.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.stock_id?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredProducts = React.useMemo(() => {
+    if (!searchQuery.trim()) return products;
 
-  const handleUploadPress = (product) => {
+    return products.filter(
+      product =>
+        product.description
+          ?.toLowerCase()
+          .includes(searchQuery.toLowerCase()) ||
+        product.stock_id?.toLowerCase().includes(searchQuery.toLowerCase()),
+    );
+  }, [products, searchQuery]);
+
+  // Handle card click to navigate to ProductDetailsScreen
+  const handleCardPress = async product => {
+    try {
+      const formData = new FormData();
+      formData.append('stock_id', product.stock_id);
+
+      const response = await fetch(`${API_URL}stc_locations.php`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      const data = await response.json();
+
+      if (data && (data.status === 'true' || data.status_basic === 'true')) {
+        navigation.navigate('ProductDetails', {
+          productData: data,
+          stockId: product.stock_id,
+        });
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Failed to fetch product details',
+        });
+      }
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Network request failed',
+      });
+    }
+  };
+
+  const handleUploadPress = product => {
     setSelectedProduct(product);
     setUploadModalVisible(true);
     setSelectedImage(null);
+    setImageValidationError('');
   };
 
   const handleImageSelect = () => {
+    setImageSelecting(true);
+    setImageValidationError('');
+
     const options = {
       mediaType: 'photo',
       quality: 0.8,
@@ -78,58 +139,45 @@ const UploadPicScreen = ({ navigation }) => {
       maxHeight: 1024,
     };
 
-    launchImageLibrary(options, (response) => {
+    launchImageLibrary(options, response => {
+      setImageSelecting(false);
+
       if (response.didCancel) {
-        Toast.show({
-          type: 'info',
-          text1: 'Cancelled',
-          text2: 'Image selection cancelled'
-        });
+        return;
       } else if (response.error) {
         Toast.show({
           type: 'error',
           text1: 'Error',
-          text2: 'Failed to select image'
+          text2: 'Failed to select image',
         });
       } else if (response.assets && response.assets.length > 0) {
         const asset = response.assets[0];
-        
+
         // File size validation (1MB = 1048576 bytes)
         if (asset.fileSize > 1048576) {
-          Toast.show({
-            type: 'error',
-            text1: 'Error',
-            text2: 'Image size must be less than 1MB'
-          });
+          setImageValidationError('Image size must be less than 1MB');
           return;
         }
 
         // File type validation
         const fileType = asset.type?.toLowerCase();
         const fileName = asset.fileName?.toLowerCase();
-        if (fileType && !fileType.includes('image/')) {
-          Toast.show({
-            type: 'error',
-            text1: 'Error',
-            text2: 'Only JPG and PNG images are allowed'
-          });
-          return;
-        }
-        if (fileName && !fileName.endsWith('.jpg') && !fileName.endsWith('.jpeg') && !fileName.endsWith('.png')) {
-          Toast.show({
-            type: 'error',
-            text1: 'Error',
-            text2: 'Only JPG and PNG images are allowed'
-          });
+
+        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+        const allowedExtensions = ['.jpg', '.jpeg', '.png'];
+
+        const isTypeValid = fileType && allowedTypes.includes(fileType);
+        const isExtensionValid =
+          fileName &&
+          allowedExtensions.some(ext => fileName.toLowerCase().endsWith(ext));
+
+        if (!isTypeValid && !isExtensionValid) {
+          setImageValidationError('Only JPG and PNG images are allowed');
           return;
         }
 
         setSelectedImage(asset);
-        Toast.show({
-          type: 'success',
-          text1: 'Success',
-          text2: 'Image selected successfully'
-        });
+        setImageValidationError('');
       }
     });
   };
@@ -139,7 +187,7 @@ const UploadPicScreen = ({ navigation }) => {
       Toast.show({
         type: 'error',
         text1: 'Error',
-        text2: 'Please select an image first'
+        text2: 'Please select an image first',
       });
       return;
     }
@@ -147,17 +195,11 @@ const UploadPicScreen = ({ navigation }) => {
     try {
       setUploading(true);
 
-      // Create form data
       const formData = new FormData();
-      
-      // Get file extension from original file name
       const originalFileName = selectedImage.fileName || 'image.jpg';
       const fileExtension = originalFileName.split('.').pop();
-      
-      // Create new file name with stock_id
       const newFileName = `${selectedProduct.stock_id}.${fileExtension}`;
-      
-      // Prepare file object
+
       const file = {
         uri: selectedImage.uri,
         type: selectedImage.type || 'image/jpeg',
@@ -165,9 +207,9 @@ const UploadPicScreen = ({ navigation }) => {
       };
 
       formData.append('stock_id', selectedProduct.stock_id);
-      formData.append('image', file);
+      formData.append('filename', file);
 
-      const response = await fetch('https://t.de2solutions.com/company/48/images/', {
+      const response = await fetch(`${API_URL}dattachment_post.php`, {
         method: 'POST',
         body: formData,
         headers: {
@@ -177,19 +219,36 @@ const UploadPicScreen = ({ navigation }) => {
 
       const result = await response.json();
 
-      if (response.ok && result.success) {
+      if (response.ok && result.status) {
         Toast.show({
           type: 'success',
           text1: 'Success',
-          text2: 'Image uploaded successfully'
+          text2: 'Image uploaded successfully',
         });
-        
+
+        // Update local state to reflect the uploaded image
+        setProducts(prevProducts =>
+          prevProducts.map(product =>
+            product.stock_id === selectedProduct.stock_id
+              ? { ...product, url: 'Yes' } // Update URL status to 'Yes'
+              : product,
+          ),
+        );
+
+        // Update cache
+        const updatedProducts = products.map(product =>
+          product.stock_id === selectedProduct.stock_id
+            ? { ...product, url: 'Yes' }
+            : product,
+        );
+        await AsyncStorage.setItem(
+          'products_cache',
+          JSON.stringify(updatedProducts),
+        );
+
         setUploadModalVisible(false);
         setSelectedImage(null);
         setSelectedProduct(null);
-        
-        // Refresh products list
-        fetchProducts();
       } else {
         throw new Error(result.message || 'Upload failed');
       }
@@ -197,21 +256,20 @@ const UploadPicScreen = ({ navigation }) => {
       Toast.show({
         type: 'error',
         text1: 'Upload Failed',
-        text2: error.message || 'Failed to upload image'
+        text2: error.message || 'Failed to upload image',
       });
     } finally {
       setUploading(false);
     }
   };
 
-  const formatNumber = (number) => {
+  const formatNumber = number => {
     if (number === null || number === undefined) return '0';
     return Number(number).toString().replace(/\.0+$/, '');
   };
 
   return (
     <View style={styles.container}>
-      {/* Custom Header */}
       <CustomHeader
         title="Upload Pictures"
         onBackPress={() => navigation.goBack()}
@@ -230,14 +288,18 @@ const UploadPicScreen = ({ navigation }) => {
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+              <Ionicons
+                name="close-circle"
+                size={20}
+                color={colors.textSecondary}
+              />
             </TouchableOpacity>
           )}
         </View>
       </View>
 
       {/* Products Grid */}
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -257,6 +319,7 @@ const UploadPicScreen = ({ navigation }) => {
                 <ProductCard
                   key={product.stock_id || index}
                   product={product}
+                  onCardPress={handleCardPress}
                   onUploadPress={handleUploadPress}
                   formatNumber={formatNumber}
                 />
@@ -271,14 +334,13 @@ const UploadPicScreen = ({ navigation }) => {
         visible={uploadModalVisible}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setUploadModalVisible(false)}
+        onRequestClose={() => !uploading && setUploadModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            {/* Modal Header */}
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Upload Image</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => setUploadModalVisible(false)}
                 style={styles.closeButton}
                 disabled={uploading}
@@ -287,25 +349,50 @@ const UploadPicScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
 
-            {/* Product Info */}
             {selectedProduct && (
               <View style={styles.modalProductInfo}>
-                <Text style={styles.productName}>{selectedProduct.description}</Text>
+                <Text style={styles.productName}>
+                  {selectedProduct.description}
+                </Text>
                 <Text style={styles.stockId}>{selectedProduct.stock_id}</Text>
               </View>
             )}
 
-            {/* Image Preview */}
+            {/* Image Section with Loader and Validation Message */}
             <View style={styles.imageSection}>
-              {selectedImage ? (
-                <Image 
-                  source={{ uri: selectedImage.uri }} 
+              {imageSelecting ? (
+                <View style={styles.loadingImageContainer}>
+                  <Ionicons
+                    name="cloud-download-outline"
+                    size={40}
+                    color={colors.primary}
+                  />
+                  <Text style={styles.loadingImageText}>Loading image...</Text>
+                </View>
+              ) : imageValidationError ? (
+                <View style={styles.validationErrorContainer}>
+                  <Ionicons
+                    name="warning-outline"
+                    size={40}
+                    color={colors.error}
+                  />
+                  <Text style={styles.validationErrorText}>
+                    {imageValidationError}
+                  </Text>
+                </View>
+              ) : selectedImage ? (
+                <Image
+                  source={{ uri: selectedImage.uri }}
                   style={styles.previewImage}
                   resizeMode="cover"
                 />
               ) : (
                 <View style={styles.placeholderImage}>
-                  <Ionicons name="image-outline" size={50} color={colors.textSecondary} />
+                  <Ionicons
+                    name="image-outline"
+                    size={50}
+                    color={colors.textSecondary}
+                  />
                   <Text style={styles.placeholderText}>No image selected</Text>
                 </View>
               )}
@@ -313,23 +400,32 @@ const UploadPicScreen = ({ navigation }) => {
 
             {/* Action Buttons */}
             <View style={styles.actionButtons}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.button, styles.selectButton]}
                 onPress={handleImageSelect}
-                disabled={uploading}
+                disabled={uploading || imageSelecting}
               >
                 <Ionicons name="images-outline" size={20} color={colors.text} />
                 <Text style={styles.buttonText}>
-                  {uploading ? 'Uploading...' : 'Select from Gallery'}
+                  {imageSelecting ? 'Selecting...' : 'Select from Gallery'}
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
-                style={[styles.button, styles.uploadButton, (!selectedImage || uploading) && styles.disabledButton]}
+              <TouchableOpacity
+                style={[
+                  styles.button,
+                  styles.uploadButton,
+                  (!selectedImage || uploading || imageSelecting) &&
+                    styles.disabledButton,
+                ]}
                 onPress={handleUpload}
-                disabled={!selectedImage || uploading}
+                disabled={!selectedImage || uploading || imageSelecting}
               >
-                <Ionicons name="cloud-upload-outline" size={20} color={colors.text} />
+                <Ionicons
+                  name="cloud-upload-outline"
+                  size={20}
+                  color={colors.text}
+                />
                 <Text style={styles.buttonText}>
                   {uploading ? 'Uploading...' : 'Upload Image'}
                 </Text>
@@ -344,9 +440,13 @@ const UploadPicScreen = ({ navigation }) => {
   );
 };
 
-// Product Card Component
-const ProductCard = ({ product, onUploadPress, formatNumber }) => (
-  <View style={styles.productCard}>
+// Updated Product Card Component with URL status and clickable
+const ProductCard = ({ product, onCardPress, onUploadPress, formatNumber }) => (
+  <TouchableOpacity
+    style={styles.productCard}
+    onPress={() => onCardPress(product)}
+    activeOpacity={0.7}
+  >
     {/* Card Header */}
     <View style={styles.cardHeader}>
       <View style={styles.cardProductInfo}>
@@ -355,9 +455,12 @@ const ProductCard = ({ product, onUploadPress, formatNumber }) => (
         </Text>
         <Text style={styles.stockId}>{product.stock_id}</Text>
       </View>
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.uploadIcon}
-        onPress={() => onUploadPress(product)}
+        onPress={e => {
+          e.stopPropagation(); // Prevent card press when clicking upload icon
+          onUploadPress(product);
+        }}
       >
         <Ionicons name="camera" size={24} color={colors.primary} />
       </TouchableOpacity>
@@ -366,15 +469,16 @@ const ProductCard = ({ product, onUploadPress, formatNumber }) => (
     {/* Separator */}
     <View style={styles.separator} />
 
-    {/* Product Details Grid - 3 columns, 2 rows */}
+    {/* Product Details Grid */}
     <View style={styles.detailsGrid}>
-      {/* First Row */}
       <View style={styles.detailRow}>
         <DetailItem label="Pieces" value={formatNumber(product.Pcs)} />
         <DetailItem label="Boxes" value={formatNumber(product.boxes)} />
-        <DetailItem label="SQ Price" value={`Rs. ${formatNumber(product.sq_price)}`} />
+        <DetailItem
+          label="SQ Price"
+          value={`Rs. ${formatNumber(product.sq_price)}`}
+        />
       </View>
-      {/* Second Row */}
       <View style={styles.detailRow}>
         <DetailItem label="Packing" value={formatNumber(product.packing)} />
         <DetailItem label="Units" value={product.units} />
@@ -382,12 +486,30 @@ const ProductCard = ({ product, onUploadPress, formatNumber }) => (
       </View>
     </View>
 
-    {/* Upload Status */}
+    {/* Upload Status with URL Indicator */}
     <View style={styles.uploadStatus}>
-      <Ionicons name="time-outline" size={14} color={colors.textSecondary} />
-      <Text style={styles.statusText}>Awaiting upload</Text>
+      <View style={styles.statusLeft}>
+        <Ionicons
+          name={product.url === 'Yes' ? 'checkmark-circle' : 'time-outline'}
+          size={14}
+          color={product.url === 'Yes' ? colors.success : colors.textSecondary}
+        />
+        <Text
+          style={[
+            styles.statusText,
+            product.url === 'Yes' && styles.uploadedText,
+          ]}
+        >
+          {product.url === 'Yes' ? 'Image Uploaded' : 'Awaiting upload'}
+        </Text>
+      </View>
+      {product.url === 'Yes' && (
+        <View style={styles.urlBadge}>
+          <Text style={styles.urlBadgeText}>URL: Yes</Text>
+        </View>
+      )}
     </View>
-  </View>
+  </TouchableOpacity>
 );
 
 // Detail Item Component
@@ -502,7 +624,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.1)',
     marginBottom: 12,
   },
-  // Details Grid - 3 columns, 2 rows layout
+  // Details Grid
   detailsGrid: {
     marginBottom: 12,
   },
@@ -534,14 +656,34 @@ const styles = StyleSheet.create({
   uploadStatus: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  statusLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   statusText: {
     fontSize: 11,
     color: colors.textSecondary,
     marginLeft: 6,
+  },
+  uploadedText: {
+    color: colors.success,
+    fontWeight: '600',
+  },
+  urlBadge: {
+    backgroundColor: colors.success,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  urlBadgeText: {
+    fontSize: 10,
+    color: colors.text,
+    fontWeight: '600',
   },
   // Modal Styles
   modalOverlay: {
@@ -610,6 +752,43 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     marginTop: 8,
+  },
+  // New styles for image loading and validation
+  loadingImageContainer: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.primary,
+    borderStyle: 'dashed',
+  },
+  loadingImageText: {
+    fontSize: 14,
+    color: colors.primary,
+    marginTop: 8,
+    fontWeight: '600',
+  },
+  validationErrorContainer: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,0,0,0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.error,
+    borderStyle: 'dashed',
+    padding: 16,
+  },
+  validationErrorText: {
+    fontSize: 14,
+    color: colors.error,
+    marginTop: 8,
+    textAlign: 'center',
+    fontWeight: '600',
   },
   // Action Buttons
   actionButtons: {

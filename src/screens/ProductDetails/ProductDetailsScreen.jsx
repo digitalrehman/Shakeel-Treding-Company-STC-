@@ -14,39 +14,41 @@ const { width } = Dimensions.get('window');
 
 const ProductDetailsScreen = ({ route, navigation }) => {
   const { productData, stockId } = route.params;
+  console.log(productData);
+
   const basicInfo = productData.data_basic || {};
   const locations = productData.data || [];
   const showroomData = productData.data_show || [];
-  
+
   // Current date and time state
   const [currentDateTime, setCurrentDateTime] = useState('');
 
   // Function to format date and time
   const getFormattedDateTime = () => {
     const now = new Date();
-    
+
     // Format date as dd/mm/yyyy
     const day = String(now.getDate()).padStart(2, '0');
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const year = now.getFullYear();
     const formattedDate = `${day}/${month}/${year}`;
-    
+
     // Format time as 12-hour format
     let hours = now.getHours();
     const minutes = String(now.getMinutes()).padStart(2, '0');
     const ampm = hours >= 12 ? 'PM' : 'AM';
-    
+
     hours = hours % 12;
     hours = hours ? hours : 12; // the hour '0' should be '12'
     const formattedTime = `${hours}:${minutes} ${ampm}`;
-    
+
     return `${formattedDate} ${formattedTime}`;
   };
 
   // Update date and time every second
   useEffect(() => {
     setCurrentDateTime(getFormattedDateTime());
-    
+
     const interval = setInterval(() => {
       setCurrentDateTime(getFormattedDateTime());
     }, 1000);
@@ -73,10 +75,12 @@ const ProductDetailsScreen = ({ route, navigation }) => {
           <Text style={styles.stockId}>Stock ID: {stockId}</Text>
           {/* Current Date and Time Display */}
           <View style={styles.dateTimeContainer}>
-            <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
-            <Text style={styles.dateTimeText}>
-              {currentDateTime}
-            </Text>
+            <Ionicons
+              name="time-outline"
+              size={16}
+              color={colors.textSecondary}
+            />
+            <Text style={styles.dateTimeText}>{currentDateTime}</Text>
           </View>
         </View>
 
@@ -123,13 +127,34 @@ const ProductDetailsScreen = ({ route, navigation }) => {
           </View>
         </View>
 
-        {/* 5th Section: Product Image */}
+        {/* 5th Section: Product Image (Dynamic from API) */}
         <View style={styles.imageSection}>
-          <Image
-            source={{ uri: productImage }}
-            style={styles.productImage}
-            resizeMode="cover"
-          />
+          {productData.url ? (
+            <Image
+              source={{ uri: productData.url }}
+              style={styles.productImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <View
+              style={[
+                styles.productImage,
+                {
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                },
+              ]}
+            >
+              <Ionicons
+                name="image-outline"
+                size={40}
+                color={colors.textSecondary}
+              />
+              <Text style={{ color: colors.textSecondary, marginTop: 8 }}>
+                Image Not Uploaded
+              </Text>
+            </View>
+          )}
         </View>
       </ScrollView>
     </View>
