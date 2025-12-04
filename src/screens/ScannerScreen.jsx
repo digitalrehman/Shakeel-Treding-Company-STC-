@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -11,6 +11,7 @@ import {
   Keyboard,
   Platform,
   Vibration,
+  AppState,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {
@@ -23,55 +24,78 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { API_URL } from '@env';
 
 const ScannerScreen = () => {
-
-  const [hasPermission, setHasPermission] = useState(false);
-  const [cameraStatus, setCameraStatus] = useState(
-    'Requesting camera permission...',
-  );
+  const [hasPermission, setHasPermission] = useState(null); // Start with null
+  const [cameraStatus, setCameraStatus] = useState('Initializing scanner...');
   const [isScanning, setIsScanning] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [isCameraActive, setIsCameraActive] = useState(true);
+  const [isCameraActive, setIsCameraActive] = useState(false); // Start with false
   const [isFlashOn, setIsFlashOn] = useState(false);
   const [showManualInput, setShowManualInput] = useState(false);
   const [manualInput, setManualInput] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
   const [showCustomAlert, setShowCustomAlert] = useState(false);
   const [alertConfig, setAlertConfig] = useState({});
+  const [appState, setAppState] = useState(AppState.currentState);
+  const [hasInitialized, setHasInitialized] = useState(false);
 
   const device = useCameraDevice('back');
   const navigation = useNavigation();
   const cameraRef = useRef(null);
   const textInputRef = useRef(null);
 
+  // ✅ App State Listener
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (appState.match(/inactive|background/) && nextAppState === 'active') {
+        // App came to foreground
+        if (hasPermission) {
+          setIsCameraActive(true);
+        }
+      } else if (nextAppState.match(/inactive|background/)) {
+        // App going to background
+        setIsCameraActive(false);
+      }
+      setAppState(nextAppState);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [appState, hasPermission]);
+
   // ✅ Simple and reliable vibration feedback
-  const playBeepSound = () => {
+  const playBeepSound = useCallback(() => {
     try {
       const vibrationPattern = Platform.OS === 'ios' ? 100 : 200;
       Vibration.vibrate(vibrationPattern);
     } catch (error) {
       console.log('Vibration not available, continuing silently');
     }
-  };
+  }, []);
 
   // ✅ Custom Alert Modal
-  const showCustomAlertModal = (title, message, onConfirm) => {
+  const showCustomAlertModal = useCallback((title, message, onConfirm) => {
     setAlertConfig({
       title,
       message,
       onConfirm: onConfirm || (() => setShowCustomAlert(false)),
     });
     setShowCustomAlert(true);
-  };
+  }, []);
 
   // ✅ Camera lifecycle management
   useFocusEffect(
     React.useCallback(() => {
-      setIsCameraActive(true);
-      setIsScanning(true);
+      if (hasPermission === true) {
+        setIsCameraActive(true);
+        setIsScanning(true);
+      }
+
       return () => {
         setIsCameraActive(false);
+        setIsScanning(false);
       };
-    }, []),
+    }, [hasPermission]),
   );
 
   // ✅ Auto focus input when modal opens
@@ -104,99 +128,139 @@ const ScannerScreen = () => {
     return () => backHandler.remove();
   }, [loading, showManualInput, searchLoading, showCustomAlert]);
 
-  /** ✅ Request camera permission */
+  /** ✅ Request camera permission with delay */
   useEffect(() => {
-    const requestPermission = async () => {
-      const permission = await Camera.requestCameraPermission();
-      if (permission === 'granted') {
-        setHasPermission(true);
-        setCameraStatus('Align QR code within frame');
-      } else {
+    if (hasInitialized) return;
+
+    const initializeCamera = async () => {
+      try {
+        // Wait a bit for the app to fully mount
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        setCameraStatus('Requesting camera permission...');
+        const permission = await Camera.requestCameraPermission();
+
+        if (permission === 'granted') {
+          setHasPermission(true);
+          setCameraStatus('Align QR code within frame');
+          setIsCameraActive(true);
+        } else {
+          setHasPermission(false);
+          setCameraStatus('Camera permission required');
+          showCustomAlertModal(
+            'Camera Access Required',
+            'Please enable camera permission to scan QR codes',
+          );
+        }
+      } catch (error) {
+        console.error('Camera initialization error:', error);
         setHasPermission(false);
-        setCameraStatus('Camera permission required');
+        setCameraStatus('Camera initialization failed');
         showCustomAlertModal(
-          'Camera Access Required',
-          'Please enable camera permission to scan QR codes',
+          'Camera Error',
+          'Failed to initialize camera. Please restart the app.',
         );
+      } finally {
+        setHasInitialized(true);
       }
     };
-    requestPermission();
-  }, []);
+
+    // Initialize only when component is mounted
+    const timer = setTimeout(() => {
+      initializeCamera();
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [hasInitialized, showCustomAlertModal]);
 
   /** ✅ Flash Toggle Function */
-  const toggleFlash = () => {
+  const toggleFlash = useCallback(() => {
     setIsFlashOn(!isFlashOn);
-  };
+  }, [isFlashOn]);
 
   /** ✅ API Call Function with Better Error Handling */
-  const fetchProductData = async (stockId, source = 'scan') => {
-    try {
-      if (source === 'manual') {
-        setSearchLoading(true);
-        Keyboard.dismiss();
-      } else {
-        setLoading(true);
-      }
-      setIsScanning(false);
+  const fetchProductData = useCallback(
+    async (stockId, source = 'scan') => {
+      try {
+        if (source === 'manual') {
+          setSearchLoading(true);
+          Keyboard.dismiss();
+        } else {
+          setLoading(true);
+        }
+        setIsScanning(false);
 
-      const formData = new FormData();
-      formData.append('stock_id', stockId);
+        const formData = new FormData();
+        formData.append('stock_id', stockId);
 
-      const response = await fetch(
-        `${API_URL}stc_locations.php`,
-        {
+        const response = await fetch(`${API_URL}stc_locations.php`, {
           method: 'POST',
           body: formData,
           headers: { Accept: 'application/json' },
-        },
-      );
+        });
 
-      const responseText = await response.text();
+        const responseText = await response.text();
 
-      if (!responseText || responseText.trim() === '') {
-        throw new Error('Empty response from server');
-      }
-
-      // ✅ Extract JSON from response
-      let jsonString = responseText;
-      if (responseText.includes('/') && responseText.includes('{')) {
-        const jsonStartIndex = responseText.indexOf('{');
-        jsonString = responseText.substring(jsonStartIndex);
-      }
-
-      // ✅ Try to parse JSON
-      let data;
-      try {
-        data = JSON.parse(jsonString);
-      } catch (parseError) {
-        try {
-          const lastBraceIndex = jsonString.lastIndexOf('}');
-          if (lastBraceIndex !== -1) {
-            const fixedJsonString = jsonString.substring(0, lastBraceIndex + 1);
-            data = JSON.parse(fixedJsonString);
-          } else {
-            throw new Error('No valid JSON object found');
-          }
-        } catch {
-          throw new Error('Invalid JSON response from server');
+        if (!responseText || responseText.trim() === '') {
+          throw new Error('Empty response from server');
         }
-      }
 
-      // ✅ Response structure check karein
-      if (data && (data.status === 'true' || data.status_basic === 'true')) {
-        setTimeout(() => {
-          setShowManualInput(false);
-          setManualInput('');
-          navigation.navigate('ProductDetails', {
-            productData: data,
-            stockId: stockId,
-          });
-        }, 1000);
-      } else {
-        // ✅ Data nahi mila - navigate nahi karenge
+        // ✅ Extract JSON from response
+        let jsonString = responseText;
+        if (responseText.includes('/') && responseText.includes('{')) {
+          const jsonStartIndex = responseText.indexOf('{');
+          jsonString = responseText.substring(jsonStartIndex);
+        }
+
+        // ✅ Try to parse JSON
+        let data;
+        try {
+          data = JSON.parse(jsonString);
+        } catch (parseError) {
+          try {
+            const lastBraceIndex = jsonString.lastIndexOf('}');
+            if (lastBraceIndex !== -1) {
+              const fixedJsonString = jsonString.substring(
+                0,
+                lastBraceIndex + 1,
+              );
+              data = JSON.parse(fixedJsonString);
+            } else {
+              throw new Error('No valid JSON object found');
+            }
+          } catch {
+            throw new Error('Invalid JSON response from server');
+          }
+        }
+
+        // ✅ Response structure check karein
+        if (data && (data.status === 'true' || data.status_basic === 'true')) {
+          setTimeout(() => {
+            setShowManualInput(false);
+            setManualInput('');
+            navigation.navigate('ProductDetails', {
+              productData: data,
+              stockId: stockId,
+            });
+          }, 1000);
+        } else {
+          // ✅ Data nahi mila - navigate nahi karenge
+          showCustomAlertModal(
+            'Product Not Found',
+            `No product found with Stock ID: "${stockId}"`,
+            () => {
+              setIsScanning(true);
+              if (source === 'manual') {
+                setTimeout(() => textInputRef.current?.focus(), 500);
+              }
+            },
+          );
+        }
+      } catch (error) {
         showCustomAlertModal(
-          'Product Not Found',
-          `No product found with Stock ID: "${stockId}"`,
+          'Request Failed',
+          error.message ||
+            'Failed to fetch product data. Please check your connection and try again.',
           () => {
             setIsScanning(true);
             if (source === 'manual') {
@@ -204,37 +268,26 @@ const ScannerScreen = () => {
             }
           },
         );
+      } finally {
+        setLoading(false);
+        setSearchLoading(false);
       }
-    } catch (error) {
-      showCustomAlertModal(
-        'Request Failed',
-        error.message ||
-          'Failed to fetch product data. Please check your connection and try again.',
-        () => {
-          setIsScanning(true);
-          if (source === 'manual') {
-            setTimeout(() => textInputRef.current?.focus(), 500);
-          }
-        },
-      );
-    } finally {
-      setLoading(false);
-      setSearchLoading(false);
-    }
-  };
+    },
+    [navigation, showCustomAlertModal],
+  );
 
   /** ✅ Extract stock_id from scanned data */
-  const extractStockId = scannedData => {
+  const extractStockId = useCallback(scannedData => {
     const stockIdPattern = /\b\d{3}-\d{4}\b/;
     const match = scannedData.match(stockIdPattern);
     if (match) return match[0];
     if (scannedData.length === 8 && scannedData.includes('-'))
       return scannedData;
     return null;
-  };
+  }, []);
 
   /** ✅ Smart Manual Input Handler */
-  const handleManualInputChange = text => {
+  const handleManualInputChange = useCallback(text => {
     const numbersOnly = text.replace(/[^\d]/g, '');
     if (numbersOnly.length > 7) return;
 
@@ -243,9 +296,9 @@ const ScannerScreen = () => {
     } else {
       setManualInput(numbersOnly);
     }
-  };
+  }, []);
 
-  const handleManualSubmit = () => {
+  const handleManualSubmit = useCallback(() => {
     if (manualInput.match(/^\d{3}-\d{4}$/)) {
       fetchProductData(manualInput, 'manual');
     } else {
@@ -254,86 +307,138 @@ const ScannerScreen = () => {
         'Please enter exactly 7 digits in format: 803-1333\n\nFirst 3 digits + hyphen + last 4 digits',
       );
     }
-  };
+  }, [manualInput, fetchProductData, showCustomAlertModal]);
 
   /** ✅ QR scanner with Beep Sound */
   const codeScanner = useCodeScanner({
     codeTypes: ['qr', 'code-128', 'ean-13'],
-    onCodeScanned: codes => {
-      if (codes[0]?.value && isScanning && !loading) {
-        const scannedValue = codes[0].value;
+    onCodeScanned: useCallback(
+      codes => {
+        if (codes[0]?.value && isScanning && !loading && hasPermission) {
+          const scannedValue = codes[0].value;
 
-        // ✅ Beep sound play karo
-        playBeepSound();
+          // ✅ Beep sound play karo
+          playBeepSound();
 
-        setIsScanning(false);
+          setIsScanning(false);
 
-        const stockId = extractStockId(scannedValue);
-        if (stockId) {
-          fetchProductData(stockId, 'scan');
-        } else {
-          showCustomAlertModal(
-            'Invalid QR Code',
-            'Scanned QR code does not contain a valid product ID format.',
-            () => setTimeout(() => setIsScanning(true), 1500),
-          );
+          const stockId = extractStockId(scannedValue);
+          if (stockId) {
+            fetchProductData(stockId, 'scan');
+          } else {
+            showCustomAlertModal(
+              'Invalid QR Code',
+              'Scanned QR code does not contain a valid product ID format.',
+              () => setTimeout(() => setIsScanning(true), 1500),
+            );
+          }
         }
-      }
-    },
+      },
+      [
+        isScanning,
+        loading,
+        hasPermission,
+        playBeepSound,
+        extractStockId,
+        fetchProductData,
+        showCustomAlertModal,
+      ],
+    ),
   });
 
   /** ✅ Close Manual Input */
-  const closeManualInput = () => {
+  const closeManualInput = useCallback(() => {
     setShowManualInput(false);
     setManualInput('');
     Keyboard.dismiss();
-  };
+  }, []);
 
   /** ✅ Custom Alert Modal Component */
-  const CustomAlertModal = () => (
-    <Modal
-      visible={showCustomAlert}
-      animationType="fade"
-      transparent={true}
-      onRequestClose={() => setShowCustomAlert(false)}
-    >
-      <View style={styles.alertModalContainer}>
-        <View style={styles.alertModalContent}>
-          <Ionicons
-            name="warning"
-            size={48}
-            color={colors.primary}
-            style={styles.alertIcon}
-          />
-          <Text style={styles.alertTitle}>{alertConfig.title}</Text>
-          <Text style={styles.alertMessage}>{alertConfig.message}</Text>
-          <TouchableOpacity
-            style={styles.alertButton}
-            onPress={alertConfig.onConfirm}
-          >
-            <Text style={styles.alertButtonText}>OK</Text>
-          </TouchableOpacity>
+  const CustomAlertModal = useCallback(
+    () => (
+      <Modal
+        visible={showCustomAlert}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowCustomAlert(false)}
+      >
+        <View style={styles.alertModalContainer}>
+          <View style={styles.alertModalContent}>
+            <Ionicons
+              name="warning"
+              size={48}
+              color={colors.primary}
+              style={styles.alertIcon}
+            />
+            <Text style={styles.alertTitle}>{alertConfig.title}</Text>
+            <Text style={styles.alertMessage}>{alertConfig.message}</Text>
+            <TouchableOpacity
+              style={styles.alertButton}
+              onPress={alertConfig.onConfirm}
+            >
+              <Text style={styles.alertButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
-    </Modal>
+      </Modal>
+    ),
+    [showCustomAlert, alertConfig],
   );
 
+  /** ✅ Retry Camera Permission */
+  const retryCameraPermission = useCallback(async () => {
+    try {
+      setCameraStatus('Requesting camera permission...');
+      const permission = await Camera.requestCameraPermission();
+
+      if (permission === 'granted') {
+        setHasPermission(true);
+        setCameraStatus('Align QR code within frame');
+        setIsCameraActive(true);
+      } else {
+        showCustomAlertModal(
+          'Camera Access Required',
+          'Please enable camera permission to scan QR codes',
+        );
+      }
+    } catch (error) {
+      showCustomAlertModal(
+        'Permission Error',
+        'Failed to request camera permission. Please check app settings.',
+      );
+    }
+  }, [showCustomAlertModal]);
+
   /** ✅ Camera not available UI */
-  if (!device || !hasPermission) {
+  if (hasPermission === null) {
     return (
       <View style={styles.center}>
-        <Ionicons name="qr-code-outline" size={80} color={colors.primary} />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>{cameraStatus}</Text>
-        <ActivityIndicator
-          size="large"
-          color={colors.primary}
-          style={{ marginVertical: 20 }}
-        />
+      </View>
+    );
+  }
 
-        {!device && hasPermission && (
-          <Text style={styles.errorText}>
-            Camera not available on this device
-          </Text>
+  if (!device || hasPermission === false) {
+    return (
+      <View style={styles.center}>
+        <Ionicons
+          name={hasPermission === false ? 'camera-off' : 'qr-code-outline'}
+          size={80}
+          color={colors.primary}
+        />
+        <Text style={styles.loadingText}>
+          {!device ? 'Camera not available on this device' : cameraStatus}
+        </Text>
+
+        {hasPermission === false && (
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={retryCameraPermission}
+          >
+            <Ionicons name="refresh" size={20} color={colors.text} />
+            <Text style={styles.retryButtonText}>Retry Camera Permission</Text>
+          </TouchableOpacity>
         )}
 
         <TouchableOpacity
@@ -366,16 +471,18 @@ const ScannerScreen = () => {
 
       {/* Camera Container */}
       <View style={styles.cameraContainer}>
-        <Camera
-          ref={cameraRef}
-          style={StyleSheet.absoluteFill}
-          device={device}
-          isActive={isCameraActive && !loading && !showManualInput}
-          codeScanner={codeScanner}
-          zoom={0}
-          audio={false}
-          torch={isFlashOn ? 'on' : 'off'}
-        />
+        {isCameraActive && hasPermission && device && (
+          <Camera
+            ref={cameraRef}
+            style={StyleSheet.absoluteFill}
+            device={device}
+            isActive={isCameraActive && !loading && !showManualInput}
+            codeScanner={codeScanner}
+            zoom={0}
+            audio={false}
+            torch={isFlashOn ? 'on' : 'off'}
+          />
+        )}
 
         {/* Scanner Frame with Gradient Border */}
         <View style={styles.scannerFrame}>
@@ -418,7 +525,7 @@ const ScannerScreen = () => {
         <TouchableOpacity
           style={[styles.actionButton, isFlashOn && styles.flashActive]}
           onPress={toggleFlash}
-          disabled={loading}
+          disabled={loading || !isCameraActive}
         >
           <Ionicons
             name={isFlashOn ? 'flashlight' : 'flashlight-outline'}
@@ -527,7 +634,7 @@ const styles = StyleSheet.create({
   },
   header: {
     width: '100%',
-    paddingTop: 60,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingBottom: 20,
     paddingHorizontal: 24,
     backgroundColor: colors.background,
@@ -557,6 +664,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     position: 'relative',
     marginBottom: 30,
+    backgroundColor: '#000', // Fallback background
   },
   scannerFrame: {
     position: 'absolute',
@@ -796,13 +904,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginTop: 16,
-    marginBottom: 8,
-  },
-  errorText: {
-    color: colors.danger,
-    fontSize: 14,
-    textAlign: 'center',
     marginBottom: 24,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 100,
+    gap: 8,
+    marginBottom: 20,
+  },
+  retryButtonText: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '600',
   },
   manualButton: {
     flexDirection: 'row',

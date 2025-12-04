@@ -88,6 +88,8 @@ const LoginScreen = ({ navigation }) => {
         text1: 'Network error',
         text2: 'Please check your internet connection',
       });
+    } finally {
+      dispatch(setLoader(false));
     }
   };
 

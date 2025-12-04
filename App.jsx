@@ -6,10 +6,12 @@ import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'react-native';
 import { Routes } from './src/routes/Routes';
+import { CartProvider } from './src/Context/CartContext';
 
 const App = () => {
   return (
     <Provider store={Store}>
+      <CartProvider>
       <SafeAreaView style={{ flex: 1 }}>
         <StatusBar
           translucent
@@ -21,6 +23,7 @@ const App = () => {
         </NavigationContainer>
       </SafeAreaView>
       <Toast />
+      </CartProvider>
     </Provider>
   );
 };

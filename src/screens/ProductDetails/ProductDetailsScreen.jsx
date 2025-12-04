@@ -6,46 +6,90 @@ import {
   ScrollView,
   Image,
   Dimensions,
+  TouchableOpacity,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { colors } from '../../utils/color';
+import { useCart } from '../../Context/CartContext';
+import QuantityModal from '../../components/QuantityModal';
 
 const { width } = Dimensions.get('window');
 
 const ProductDetailsScreen = ({ route, navigation }) => {
   const { productData, stockId } = route.params;
-  console.log(productData);
+  const { addToCart, cartCount } = useCart();
+  const [quantityModalVisible, setQuantityModalVisible] = useState(false);
 
   const basicInfo = productData.data_basic || {};
   const locations = productData.data || [];
   const showroomData = productData.data_show || [];
-
-  // Current date and time state
   const [currentDateTime, setCurrentDateTime] = useState('');
 
-  // Function to format date and time
+  // Set cart button in header
+  React.useLayoutEffect(() => {
+    console.log('Setting header options, cartCount:', cartCount);
+    navigation.setOptions({
+      headerStyle: {
+        backgroundColor: colors.background,
+      },
+      headerTintColor: colors.primary, // Back button color
+      headerTitleStyle: {
+        color: colors.text,
+        fontWeight: '600',
+      },
+      headerTitleAlign: 'center',
+      headerRight: () => (
+        <View style={styles.headerRightContainer}>
+          <TouchableOpacity
+            style={styles.cartIconContainer}
+            onPress={() => navigation.navigate('CartScreen')}
+          >
+            <Ionicons name="cart-outline" size={24} color={colors.primary} />
+
+            {/* Cart Badge - ALWAYS SHOW COUNT (even 0) */}
+            <View
+              style={[
+                styles.cartBadge,
+                cartCount === 0 && styles.cartBadgeEmpty,
+              ]}
+            >
+              <Text style={styles.cartBadgeText}>
+                {cartCount > 9 ? '9+' : cartCount}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.addToCartButton}
+            onPress={() => setQuantityModalVisible(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="add" size={18} color={colors.text} />
+            <Text style={styles.addToCartText}>Add to Cart</Text>
+          </TouchableOpacity>
+        </View>
+      ),
+    });
+  }, [navigation, cartCount]);
+
   const getFormattedDateTime = () => {
     const now = new Date();
-
-    // Format date as dd/mm/yyyy
     const day = String(now.getDate()).padStart(2, '0');
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const year = now.getFullYear();
     const formattedDate = `${day}/${month}/${year}`;
 
-    // Format time as 12-hour format
     let hours = now.getHours();
     const minutes = String(now.getMinutes()).padStart(2, '0');
     const ampm = hours >= 12 ? 'PM' : 'AM';
 
     hours = hours % 12;
-    hours = hours ? hours : 12; // the hour '0' should be '12'
+    hours = hours ? hours : 12;
     const formattedTime = `${hours}:${minutes} ${ampm}`;
 
     return `${formattedDate} ${formattedTime}`;
   };
 
-  // Update date and time every second
   useEffect(() => {
     setCurrentDateTime(getFormattedDateTime());
 
@@ -56,9 +100,16 @@ const ProductDetailsScreen = ({ route, navigation }) => {
     return () => clearInterval(interval);
   }, []);
 
-  // Alternative static image URL
-  const productImage =
-    'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=400&h=300&fit=crop';
+  const handleAddToCart = quantityInfo => {
+    addToCart(
+      {
+        stockId,
+        basicInfo,
+        productData,
+      },
+      quantityInfo,
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -157,11 +208,21 @@ const ProductDetailsScreen = ({ route, navigation }) => {
           )}
         </View>
       </ScrollView>
+
+      {/* Quantity Modal */}
+      <QuantityModal
+        visible={quantityModalVisible}
+        onClose={() => setQuantityModalVisible(false)}
+        onSubmit={handleAddToCart}
+        productName={basicInfo.description || 'Product'}
+        stockId={stockId}
+        uom={basicInfo.units}
+      />
     </View>
   );
 };
 
-// Detail Box Component - 3 per row (icons removed)
+// DetailBox Component
 const DetailBox = ({ label, value }) => (
   <View style={styles.detailBox}>
     <Text style={styles.detailLabel}>{label}</Text>
@@ -171,14 +232,13 @@ const DetailBox = ({ label, value }) => (
   </View>
 );
 
-// Function to remove trailing zeros after decimal point
+// Format Number Helper
 const formatNumber = number => {
   if (number === null || number === undefined) return '0';
-  // Convert to string and remove trailing zeros after decimal
   return Number(number).toString().replace(/\.0+$/, '');
 };
 
-// Location Card Component
+// LocationCard Component
 const LocationCard = ({ location, index }) => (
   <View style={styles.locationCard}>
     <View style={styles.locationHeader}>
@@ -207,7 +267,7 @@ const LocationCard = ({ location, index }) => (
   </View>
 );
 
-// Stock Info Component
+// StockInfo Component
 const StockInfo = ({ type, boxes, pcs }) => {
   const getConfig = type => {
     switch (type) {
@@ -252,7 +312,7 @@ const StockInfo = ({ type, boxes, pcs }) => {
   );
 };
 
-// Showroom Card Component
+// ShowroomCard Component
 const ShowroomCard = ({ showroom, index }) => (
   <View style={styles.showroomCard}>
     <View style={styles.showroomHeader}>
@@ -283,6 +343,75 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 20,
   },
+  // Header Styles - IMPROVED WITH BADGE
+  headerRightContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginRight: 16,
+  },
+  cartIconContainer: {
+    position: 'relative',
+    padding: 6,
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    borderWidth: 0,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cartBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: colors.danger,
+    borderRadius: 12,
+    minWidth: 22,
+    height: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  cartBadgeEmpty: {
+    backgroundColor: colors.textSecondary,
+    opacity: 0.7,
+  },
+  cartBadgeText: {
+    color: colors.text,
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  addToCartButton: {
+    backgroundColor: colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 110,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 5,
+    elevation: 5,
+    borderWidth: 0,
+  },
+  addToCartText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
   // Image Section - Last section
   imageSection: {
     width: '100%',
@@ -295,6 +424,7 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: colors.card,
     borderRadius: 12,
+    borderWidth: 0,
   },
   // Title Section - 1st section
   titleSection: {
@@ -305,10 +435,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.5,
     shadowRadius: 8,
     elevation: 6,
     marginBottom: 16,
+    borderWidth: 0,
   },
   productTitle: {
     fontSize: 24,
@@ -352,7 +483,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   detailBox: {
-    width: (width - 48) / 3, // 3 boxes per row with padding
+    width: (width - 48) / 3,
     backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
@@ -360,9 +491,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.3,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
+    borderWidth: 0,
   },
   detailLabel: {
     fontSize: 12,
@@ -377,7 +509,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     textAlign: 'center',
   },
-  // Locations Section - 2nd section
   locationsSection: {
     paddingInline: 16,
     marginTop: 16,
@@ -388,35 +519,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   locationCard: {
-    width: (width - 48) / 2, // 2 cards per row
+    width: (width - 48) / 2,
     backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.3,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
+    borderWidth: 0,
   },
   locationHeader: {
     marginBottom: 12,
-  },
-  locationBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-    marginBottom: 8,
-  },
-  locationCode: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 4,
   },
   locationName: {
     fontSize: 14,
@@ -431,9 +547,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(213, 155, 67, 0.1)',
     padding: 6,
     borderRadius: 6,
+    borderWidth: 0,
   },
   stockHeader: {
     flexDirection: 'row',
@@ -453,7 +570,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontWeight: '600',
   },
-  // Showroom Section - 3rd section
   showroomSection: {
     paddingInline: 16,
   },
@@ -463,16 +579,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   showroomCard: {
-    width: (width - 48) / 2, // 2 cards per row
+    width: (width - 48) / 2,
     backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.3,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
+    borderWidth: 0,
   },
   showroomHeader: {
     flexDirection: 'row',
