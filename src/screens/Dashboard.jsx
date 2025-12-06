@@ -14,10 +14,10 @@ import Icon2 from 'react-native-vector-icons/MaterialIcons';
 import { colors } from '../utils/color';
 import { useDispatch } from 'react-redux';
 import { setLogout } from '../store/authSlice';
-import { useNavigation } from '@react-navigation/native'; 
+import { useNavigation } from '@react-navigation/native';
 const Dashboard = () => {
   const dispatch = useDispatch();
-  const navigation = useNavigation(); 
+  const navigation = useNavigation();
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -77,11 +77,22 @@ const Dashboard = () => {
   ];
 
   const quickActions = [
-    { id: 1, title: 'Order', icon: 'shopping-cart' },
-    { id: 2, title: 'Quotation', icon: 'description' },
+    { id: 1, title: 'Order', icon: 'shopping-cart', screen: 'OrderScreen' },
+    {
+      id: 2,
+      title: 'Quotation',
+      icon: 'description',
+      screen: 'InquiryScreen',
+    },
   ];
 
-  const handleCardPress = (screenName) => {
+  const handleCardPress = screenName => {
+    if (screenName) {
+      navigation.navigate(screenName);
+    }
+  };
+
+  const handleQuickActionPress = screenName => {
     if (screenName) {
       navigation.navigate(screenName);
     }
@@ -109,7 +120,10 @@ const Dashboard = () => {
             </View>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.iconCircle, { backgroundColor: 'rgba(255,215,0,0.1)' }]}
+            style={[
+              styles.iconCircle,
+              { backgroundColor: 'rgba(255,215,0,0.1)' },
+            ]}
             onPress={() => dispatch(setLogout())}
           >
             <Icon2 name="logout" size={22} color="#FFD700" />
@@ -149,12 +163,20 @@ const Dashboard = () => {
         >
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.quickActionsContainer}>
-            {quickActions.map((action) => (
+            {quickActions.map(action => (
               <Animated.View key={action.id} style={styles.quickActionWrapper}>
-                <TouchableOpacity style={styles.quickActionButton} activeOpacity={0.7}>
+                <TouchableOpacity
+                  style={styles.quickActionButton}
+                  activeOpacity={0.7}
+                  onPress={() => handleQuickActionPress(action.screen)}
+                >
                   <View style={styles.quickActionContent}>
                     <View style={styles.quickActionIcon}>
-                      <Icon name={action.icon} size={28} color={colors.primary} />
+                      <Icon
+                        name={action.icon}
+                        size={28}
+                        color={colors.primary}
+                      />
                     </View>
                     <Text style={styles.quickActionText}>{action.title}</Text>
                   </View>
@@ -231,11 +253,15 @@ const Dashboard = () => {
           </View>
 
           <View style={styles.activityList}>
-            {[1, 2, 3].map((item) => (
+            {[1, 2, 3].map(item => (
               <Animated.View key={item} style={styles.activityItemWrapper}>
                 <View style={styles.activityItem}>
                   <View style={styles.activityIcon}>
-                    <Icon name="check-circle" size={20} color={colors.success} />
+                    <Icon
+                      name="check-circle"
+                      size={20}
+                      color={colors.success}
+                    />
                   </View>
                   <View style={styles.activityContent}>
                     <Text style={styles.activityTitle}>
@@ -257,7 +283,6 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-
 
 const styles = StyleSheet.create({
   container: {

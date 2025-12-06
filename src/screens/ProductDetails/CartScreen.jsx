@@ -53,12 +53,22 @@ const CartScreen = ({ navigation }) => {
     };
   };
 
+  const formatOrderDetailsForAPI = () => {
+    return cartItems.map(item => ({
+      stock_id: item.stockId || '',
+      description: item.productName || '',
+      box: parseFloat(item.boxes) || 0,
+      pec: parseFloat(item.pieces) || 0,
+      unit_price: parseFloat(item.price) || 0,
+    }));
+  };
+
   const handleProcessOrder = () => {
     if (cartItems.length === 0) {
       Toast.show({
         type: 'error',
-        text1: 'Cart Khali Hai',
-        text2: 'Order process karnay se pehlay cart mein items add karein',
+        text1: 'Cart is Empty',
+        text2: 'Please add items to cart before processing order',
         position: 'bottom',
       });
       return;
@@ -70,8 +80,8 @@ const CartScreen = ({ navigation }) => {
     if (!name.trim()) {
       Toast.show({
         type: 'error',
-        text1: 'Information Missing',
-        text2: 'Customer ka naam enter karein',
+        text1: 'Information Required',
+        text2: 'Please enter customer name',
         position: 'bottom',
       });
       return;
@@ -80,8 +90,8 @@ const CartScreen = ({ navigation }) => {
     if (!contactNo.trim()) {
       Toast.show({
         type: 'error',
-        text1: 'Information Missing',
-        text2: 'Contact number enter karein',
+        text1: 'Information Required',
+        text2: 'Please enter contact number',
         position: 'bottom',
       });
       return;
@@ -90,16 +100,25 @@ const CartScreen = ({ navigation }) => {
     try {
       setIsSubmitting(true);
 
-      // Loading toast show karein
+      // Show loading toast
       Toast.show({
         type: 'info',
         text1: 'Processing...',
-        text2: 'Apki order submit ki ja rahi hai',
+        text2: 'Your order is being submitted',
         visibilityTime: 2000,
       });
 
+      // Prepare order data with correct field names
+      const orderData = {
+        customer_name: name.trim(),
+        contact_number: contactNo.trim(),
+        // Add other fields if needed
+      };
+
+      console.log('Submitting order with data:', orderData);
+
       // Submit order with customer info
-      const result = await submitOrder({ name, contactNo });
+      const result = await submitOrder(orderData);
 
       // Success toast
       Toast.show({
@@ -113,15 +132,18 @@ const CartScreen = ({ navigation }) => {
       });
 
       setCustomerModalVisible(false);
+      setName('');
+      setContactNo('');
+
       setTimeout(() => {
         navigation.navigate('Dashboard');
       }, 2000);
     } catch (error) {
-      // Error toast
+      console.error('Order submission error:', error);
       Toast.show({
         type: 'error',
         text1: 'Order Failed ❌',
-        text2: error.message || 'Order submit nahi ho saki. Dobara try karein.',
+        text2: error.message || 'Order submission failed. Please try again.',
         position: 'bottom',
         visibilityTime: 4000,
       });
@@ -129,13 +151,12 @@ const CartScreen = ({ navigation }) => {
       setIsSubmitting(false);
     }
   };
-
   const handleRemoveItem = (itemId, itemName) => {
     removeFromCart(itemId);
     Toast.show({
       type: 'success',
-      text1: 'Item Remove Ho Gaya',
-      text2: `${itemName} cart se remove kar diya gaya`,
+      text1: 'Item Removed',
+      text2: `${itemName} has been removed from cart`,
       position: 'bottom',
     });
   };
@@ -146,15 +167,15 @@ const CartScreen = ({ navigation }) => {
     return (
       <View style={styles.emptyContainer}>
         <Ionicons name="cart-outline" size={80} color={colors.textSecondary} />
-        <Text style={styles.emptyText}>Aapka Cart Khali Hai</Text>
+        <Text style={styles.emptyText}>Your Cart is Empty</Text>
         <Text style={styles.emptySubText}>
-          Products add karne ke liye product details se jayein
+          Go to product details to add products
         </Text>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backButtonText}>Products Par Wapas Jayein</Text>
+          <Text style={styles.backButtonText}>Back to Products</Text>
         </TouchableOpacity>
       </View>
     );
@@ -283,7 +304,7 @@ const CartScreen = ({ navigation }) => {
                 size={24}
                 color={colors.background}
               />
-              <Text style={styles.processButtonText}>Order Process Karein</Text>
+              <Text style={styles.processButtonText}>Process Order</Text>
             </>
           )}
         </TouchableOpacity>
@@ -300,16 +321,16 @@ const CartScreen = ({ navigation }) => {
           <View style={styles.customerModal}>
             <Text style={styles.modalTitle}>Customer Information</Text>
             <Text style={styles.modalSubtitle}>
-              Order complete karne ke liye apni details enter karein
+              Please enter your details to complete the order
             </Text>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Customer Ka Naam *</Text>
+              <Text style={styles.inputLabel}>Customer Name *</Text>
               <TextInput
                 style={styles.input}
                 value={name}
                 onChangeText={setName}
-                placeholder="Customer ka naam enter karein"
+                placeholder="Enter customer name"
                 placeholderTextColor={colors.textSecondary}
                 editable={!isSubmitting}
               />
@@ -322,9 +343,10 @@ const CartScreen = ({ navigation }) => {
                 value={contactNo}
                 onChangeText={setContactNo}
                 keyboardType="phone-pad"
-                placeholder="Contact number enter karein"
+                placeholder="Enter contact number"
                 placeholderTextColor={colors.textSecondary}
                 editable={!isSubmitting}
+                maxLength={15}
               />
             </View>
 
@@ -338,8 +360,8 @@ const CartScreen = ({ navigation }) => {
                   setCustomerModalVisible(false);
                   Toast.show({
                     type: 'info',
-                    text1: 'Order Cancel',
-                    text2: 'Order process cancel kar diya gaya',
+                    text1: 'Order Cancelled',
+                    text2: 'Order processing has been cancelled',
                     position: 'bottom',
                   });
                 }}
@@ -363,9 +385,7 @@ const CartScreen = ({ navigation }) => {
                     </Text>
                   </>
                 ) : (
-                  <Text style={styles.modalSubmitText}>
-                    Order Submit Karein
-                  </Text>
+                  <Text style={styles.modalSubmitText}>Submit Order</Text>
                 )}
               </TouchableOpacity>
             </View>
