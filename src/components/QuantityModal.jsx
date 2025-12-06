@@ -26,20 +26,11 @@ const QuantityModal = ({
   const [pieces, setPieces] = useState('');
   const [price, setPrice] = useState('');
 
-  // Corrected logic as per requirement:
-  // SQM UOM: All fields enabled (boxes, pieces, price)
-  // PCS UOM: Boxes disabled, only pieces and price enabled
-
-  // Check if UOM is PCS (disable boxes only)
   const isPcsUom =
     uom.toLowerCase().includes('pcs') || uom.toLowerCase().includes('piece');
 
-  // For SQM UOM, all fields are enabled (no special condition needed)
-
   const handleSubmit = () => {
-    // Validate based on UOM
     if (isPcsUom) {
-      // For PCS UOM, only pieces should be entered (boxes disabled)
       if (!pieces) {
         Toast.show({
           type: 'error',
@@ -49,8 +40,6 @@ const QuantityModal = ({
         return;
       }
     } else {
-      // For SQM and other UOMs, both boxes and pieces can be entered
-      // But at least one should be entered
       if (!boxes && !pieces) {
         Toast.show({
           type: 'error',

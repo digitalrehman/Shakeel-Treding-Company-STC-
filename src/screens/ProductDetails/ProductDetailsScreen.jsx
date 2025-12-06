@@ -18,6 +18,7 @@ const { width } = Dimensions.get('window');
 const ProductDetailsScreen = ({ route, navigation }) => {
   const { productData, stockId } = route.params;
   const { addToCart, cartCount } = useCart();
+
   const [quantityModalVisible, setQuantityModalVisible] = useState(false);
 
   const basicInfo = productData.data_basic || {};
@@ -27,7 +28,6 @@ const ProductDetailsScreen = ({ route, navigation }) => {
 
   // Set cart button in header
   React.useLayoutEffect(() => {
-    console.log('Setting header options, cartCount:', cartCount);
     navigation.setOptions({
       headerStyle: {
         backgroundColor: colors.background,

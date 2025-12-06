@@ -8,16 +8,13 @@ export const CurrentLogin = createAsyncThunk(
   async ({ config, username, password }) => {
     return axios(config)
       .then(data => {
-        console.log('first.>>>>>>>>>>>>>', config, username, password);
         const user = data?.data?.data?.find(user => user.user_id === username);
         if (user) {
           const hashedPassword = CryptoJS.MD5(password).toString();
 
           if (hashedPassword === user.password) {
-            console.log('Login successful');
             return user;
           } else {
-            console.log('Invalid password');
             Toast.show({
               type: 'error',
               text1: 'Invalid password',
@@ -25,7 +22,6 @@ export const CurrentLogin = createAsyncThunk(
             });
           }
         } else {
-          console.log('Not Found User');
           Toast.show({
             type: 'error',
             text1: 'Invalid username',
@@ -45,7 +41,7 @@ export const AuthSlice = createSlice({
     currentData: [],
     cartData: [],
     token: '',
-    isLoggedIn: false, // 👈 Add this
+    isLoggedIn: false,
     GrandCartTotalPrice: '0',
     Loading: false,
     AllProduct: [],
@@ -74,12 +70,12 @@ export const AuthSlice = createSlice({
 
     setToken: (state, action) => {
       state.token = action.payload.data;
-      state.isLoggedIn = !!action.payload.data; // 👈 Set true when token available
+      state.isLoggedIn = !!action.payload.data;
     },
     setLogout: state => {
       state.token = '';
       state.currentData = [];
-      state.isLoggedIn = false; // 👈 Reset
+      state.isLoggedIn = false;
     },
   },
 
@@ -91,15 +87,11 @@ export const AuthSlice = createSlice({
           state.currentData = action.payload;
           state.token = action.payload.password;
         } else {
-          // Toast.show({
-          //   type: 'error',
-          //   text1: 'Your username or password is incorrect',
-          // });
+          Toast.show({
+            type: 'error',
+            text1: 'Your username or password is incorrect',
+          });
         }
-        console.log('first', action.payload);
-
-        // state.currentData = action.payload.data
-        // state.token = action.payload.data.token
       })
       .addCase(CurrentLogin.rejected, (state, action) => {
         state.Loading = false;
@@ -107,7 +99,6 @@ export const AuthSlice = createSlice({
   },
 });
 
-// Action creators are generated for each case reducer function
 export const {
   setMyData,
   setToken,
@@ -120,6 +111,3 @@ export const {
 } = AuthSlice.actions;
 
 export default AuthSlice.reducer;
-
-// export const getCurrentUser = state => state.UsersData.currentData
-// export const getToken = state => state.UsersData.currentData
