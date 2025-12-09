@@ -37,8 +37,6 @@ const CartScreen = ({ navigation }) => {
       const unit_price = parseFloat(item.price) || 0;
       const pc_packing = parseFloat(item.basicInfo?.packing) || 1;
       const quantity = box * pc_packing + pec * pc_packing;
-
-      // New formula: total += quantity * unit_price
       total += quantity * unit_price;
     });
 
@@ -53,16 +51,6 @@ const CartScreen = ({ navigation }) => {
       ),
       totalAmount: total,
     };
-  };
-
-  const formatOrderDetailsForAPI = () => {
-    return cartItems.map(item => ({
-      stock_id: item.stockId || '',
-      description: item.productName || '',
-      box: parseFloat(item.boxes) || 0,
-      pec: parseFloat(item.pieces) || 0,
-      unit_price: parseFloat(item.price) || 0,
-    }));
   };
 
   const handleProcessOrder = () => {
@@ -132,10 +120,7 @@ const CartScreen = ({ navigation }) => {
       setCustomerModalVisible(false);
       setName('');
       setContactNo('');
-
-      setTimeout(() => {
-        navigation.navigate('Dashboard');
-      }, 2000);
+      navigation.navigate('MainTabs', { screen: 'Dashboard' });
     } catch (error) {
       console.error('Order submission error:', error);
 

@@ -50,10 +50,11 @@ export const CartProvider = ({ children }) => {
         const pec = parseFloat(item.pieces) || 0;
         const pc_packing = parseFloat(item.basicInfo?.packing) || 1;
 
-        const quantity = box * pc_packing + pec;
+        const api_box = parseFloat(item.basicInfo?.boxes);
+        const api_pec = parseFloat(item.basicInfo?.Pcs);
+        const quantity = (api_box / api_pec) * pec + box;
         const amount6 = parseFloat(item.price) || 0;
         const unit_price = amount6 * pc_packing;
-
         const text1 = parseFloat(item.discount) || 0;
 
         const new_discount = quantity * text1;
@@ -77,17 +78,21 @@ export const CartProvider = ({ children }) => {
           discount_percent: discount_percent.toFixed(2),
         };
       });
-
+      // 8031067
       let total = 0;
       sales_order_details.forEach(i => {
-        total += parseFloat(i.quantity) * parseFloat(i.unit_price);
+        total +=
+          parseFloat(i.quantity) *
+          parseFloat(i.unit_price) *
+          (1 - parseFloat(i.discount_percent) / 100);
+        console.log('discount_percent', 1 - parseFloat(i.discount_percent));
+        console.log('unit_price', parseFloat(i.unit_price));
+        console.log('quantity', parseFloat(i.quantity));
       });
+      console.log('total', total);
 
-      // IMPORTANT FIXES
-      // Backend expects 32 for both Order and Quotation
-      const trans_type = orderData.document_type === 'Quotation' ? 32 : 33;
+      const trans_type = orderData.document_type === 'Quotation' ? 32 : 30;
 
-      // Backend expects "10:00:00 AM" format
       const formattedTime = new Date().toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit',
@@ -103,7 +108,6 @@ export const CartProvider = ({ children }) => {
       formData.append('venue', orderData.venue || '');
       formData.append('total', total.toFixed(2));
 
-      // Advance is required. You can set 0 if allowed.
       formData.append('so_advance', orderData.so_advance || '0');
 
       formData.append('user_id', currentUserId.toString());
@@ -112,11 +116,10 @@ export const CartProvider = ({ children }) => {
         JSON.stringify(sales_order_details),
       );
 
-      // Backend expects numeric bank_id even if empty
-      formData.append('bank_id', orderData.bank_id || '0');
+      formData.append('bank_id', '');
 
       formData.append('update_id', '0');
-      formData.append('comments', orderData.comments || '');
+      formData.append('comments', '');
       formData.append('discount1', '0');
 
       formData.append('f_time', formattedTime);
@@ -124,9 +127,6 @@ export const CartProvider = ({ children }) => {
       formData.append('trans_type', trans_type.toString());
 
       formData.append('func_type', '0');
-      formData.append('function_ceremony', '');
-      formData.append('function_arranged', '');
-      formData.append('function_location', '');
       formData.append('so_ref', '');
       formData.append('created_by', currentUserId.toString());
 
@@ -136,15 +136,8 @@ export const CartProvider = ({ children }) => {
         body: formData,
       });
 
-      const responseText = await response.text();
-      console.log('Raw API Response:', responseText);
-
-      let result;
-      try {
-        result = JSON.parse(responseText);
-      } catch (e) {
-        throw new Error('Invalid response: ' + responseText);
-      }
+      const result = await response.json();
+      console.log('Raw API Response:', result);
 
       if (result.status === true) {
         clearCart();

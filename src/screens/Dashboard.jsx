@@ -11,14 +11,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useEffect, useRef } from 'react';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import Icon2 from 'react-native-vector-icons/MaterialIcons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { colors } from '../utils/color';
 import { useDispatch } from 'react-redux';
 import { setLogout } from '../store/authSlice';
 import { useNavigation } from '@react-navigation/native';
+import { useCart } from '../Context/CartContext';
 const Dashboard = () => {
   const dispatch = useDispatch();
   const navigation = useNavigation();
-
+  const { cartCount } = useCart();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
@@ -113,6 +115,22 @@ const Dashboard = () => {
           <Text style={styles.companyName}>STC</Text>
         </View>
         <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={() => navigation.navigate('CartScreen')}
+          >
+            <Ionicons name="cart-outline" size={28} color={colors.text} />
+            <View
+              style={[
+                styles.notificationBadge,
+                cartCount === 0 && { backgroundColor: colors.textSecondary },
+              ]}
+            >
+              <Text style={styles.badgeText}>
+                {cartCount > 9 ? '9+' : cartCount}
+              </Text>
+            </View>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.iconButton}>
             <Icon name="notifications" size={24} color={colors.text} />
             <View style={styles.notificationBadge}>
@@ -321,7 +339,6 @@ const styles = StyleSheet.create({
     padding: 5,
     position: 'relative',
   },
-  // New style for circular logout button
   iconCircle: {
     width: 40,
     height: 40,
