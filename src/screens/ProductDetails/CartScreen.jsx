@@ -26,6 +26,7 @@ const CartScreen = ({ navigation }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [name, setName] = useState('');
   const [contactNo, setContactNo] = useState('');
+  const [documentType, setDocumentType] = useState('Order');
 
   const calculateTotals = () => {
     let total = 0;
@@ -35,9 +36,10 @@ const CartScreen = ({ navigation }) => {
       const pec = parseFloat(item.pieces) || 0;
       const unit_price = parseFloat(item.price) || 0;
       const pc_packing = parseFloat(item.basicInfo?.packing) || 1;
+      const quantity = box * pc_packing + pec * pc_packing;
 
-      const sqr_m = box * pc_packing + pec * pc_packing;
-      total += sqr_m * unit_price;
+      // New formula: total += quantity * unit_price
+      total += quantity * unit_price;
     });
 
     return {
@@ -100,7 +102,6 @@ const CartScreen = ({ navigation }) => {
     try {
       setIsSubmitting(true);
 
-      // Show loading toast
       Toast.show({
         type: 'info',
         text1: 'Processing...',
@@ -108,22 +109,19 @@ const CartScreen = ({ navigation }) => {
         visibilityTime: 2000,
       });
 
-      // Prepare order data with correct field names
       const orderData = {
         customer_name: name.trim(),
         contact_number: contactNo.trim(),
-        // Add other fields if needed
+        document_type: documentType,
       };
 
       console.log('Submitting order with data:', orderData);
 
-      // Submit order with customer info
       const result = await submitOrder(orderData);
 
-      // Success toast
       Toast.show({
         type: 'success',
-        text1: 'Order Successful! ✅',
+        text1: `${documentType} Successful!`,
         text2: `Order ID: ${
           result.orderId
         }\nTotal: Rs. ${calculateTotals().totalAmount.toLocaleString()}`,
@@ -140,10 +138,21 @@ const CartScreen = ({ navigation }) => {
       }, 2000);
     } catch (error) {
       console.error('Order submission error:', error);
+
+      // Show more detailed error
+      let errorMessage =
+        error.message || 'Submission failed. Please try again.';
+
+      // Check for specific error patterns
+      if (errorMessage.includes('status') && errorMessage.includes('false')) {
+        errorMessage =
+          'Server rejected the request. Please check the data and try again.';
+      }
+
       Toast.show({
         type: 'error',
-        text1: 'Order Failed ❌',
-        text2: error.message || 'Order submission failed. Please try again.',
+        text1: `${documentType} Failed`,
+        text2: errorMessage,
         position: 'bottom',
         visibilityTime: 4000,
       });
@@ -151,6 +160,7 @@ const CartScreen = ({ navigation }) => {
       setIsSubmitting(false);
     }
   };
+
   const handleRemoveItem = (itemId, itemName) => {
     removeFromCart(itemId);
     Toast.show({
@@ -196,6 +206,7 @@ const CartScreen = ({ navigation }) => {
             const box = parseFloat(item.boxes) || 0;
             const pec = parseFloat(item.pieces) || 0;
             const unit_price = parseFloat(item.price) || 0;
+            const discount = parseFloat(item.discount) || 0;
             const pc_packing = parseFloat(item.basicInfo?.packing) || 1;
             const sqr_m = box * pc_packing + pec * pc_packing;
             const itemTotal = sqr_m * unit_price;
@@ -243,6 +254,12 @@ const CartScreen = ({ navigation }) => {
                     />
                   </View>
                   <View style={styles.detailRow}>
+                    <DetailItem
+                      label="Discount"
+                      value={`Rs. ${parseFloat(
+                        item.discount || 0,
+                      ).toLocaleString()}`}
+                    />
                     <DetailItem
                       label="Packing"
                       value={item.basicInfo?.packing || '1'}
@@ -310,7 +327,6 @@ const CartScreen = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      {/* Customer Info Modal */}
       <Modal
         visible={customerModalVisible}
         animationType="slide"
@@ -348,6 +364,40 @@ const CartScreen = ({ navigation }) => {
                 editable={!isSubmitting}
                 maxLength={15}
               />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Document Type</Text>
+              <View style={styles.radioContainer}>
+                <TouchableOpacity
+                  style={styles.radioButton}
+                  onPress={() => setDocumentType('Quotation')}
+                  disabled={isSubmitting}
+                >
+                  <View style={styles.radioOuter}>
+                    {documentType === 'Quotation' && (
+                      <View style={styles.radioInner} />
+                    )}
+                  </View>
+                  <Text style={styles.radioLabel}>Quotation</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.radioButton}
+                  onPress={() => setDocumentType('Order')}
+                  disabled={isSubmitting}
+                >
+                  <View style={styles.radioOuter}>
+                    {documentType === 'Order' && (
+                      <View style={styles.radioInner} />
+                    )}
+                  </View>
+                  <Text style={styles.radioLabel}>Order</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.radioNote}>
+                Selected: {documentType} (Value captured for later use)
+              </Text>
             </View>
 
             <View style={styles.modalButtons}>
@@ -643,6 +693,42 @@ const styles = StyleSheet.create({
     color: colors.text,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  radioContainer: {
+    flexDirection: 'row',
+    marginTop: 8,
+    gap: 24,
+  },
+  radioButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  radioOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  radioInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: colors.primary,
+  },
+  radioLabel: {
+    fontSize: 16,
+    color: colors.text,
+    fontWeight: '500',
+  },
+  radioNote: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 8,
+    fontStyle: 'italic',
   },
   modalButtons: {
     flexDirection: 'row',

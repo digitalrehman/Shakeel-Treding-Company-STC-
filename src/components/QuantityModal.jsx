@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -21,13 +21,21 @@ const QuantityModal = ({
   productName,
   stockId,
   uom = '',
+  price = 0,
 }) => {
   const [boxes, setBoxes] = useState('');
   const [pieces, setPieces] = useState('');
-  const [price, setPrice] = useState('');
+  const [priceValue, setPriceValue] = useState('');
+  const [discount, setDiscount] = useState('');
 
   const isPcsUom =
     uom.toLowerCase().includes('pcs') || uom.toLowerCase().includes('piece');
+
+  useEffect(() => {
+    if (price && price > 0) {
+      setPriceValue(price.toString());
+    }
+  }, [price, visible]);
 
   const handleSubmit = () => {
     if (isPcsUom) {
@@ -50,10 +58,32 @@ const QuantityModal = ({
       }
     }
 
+    if (!priceValue) {
+      Toast.show({
+        type: 'error',
+        text1: 'Price Required',
+        text2: 'Please enter price',
+      });
+      return;
+    }
+
+    const priceNum = parseFloat(priceValue) || 0;
+    const discountNum = parseFloat(discount) || 0;
+
+    if (discountNum > priceNum) {
+      Toast.show({
+        type: 'error',
+        text1: 'Invalid Discount',
+        text2: 'Discount cannot be greater than price',
+      });
+      return;
+    }
+
     const quantityInfo = {
       boxes: parseInt(boxes) || 0,
       pieces: parseInt(pieces) || 0,
-      price: parseFloat(price) || 0,
+      price: priceNum,
+      discount: discountNum,
       uom: uom,
     };
 
@@ -64,7 +94,8 @@ const QuantityModal = ({
   const resetForm = () => {
     setBoxes('');
     setPieces('');
-    setPrice('');
+    setPriceValue('');
+    setDiscount('');
     onClose();
   };
 
@@ -108,7 +139,6 @@ const QuantityModal = ({
               </View>
             </View>
 
-            {/* UOM Info Message - Only for PCS */}
             {isPcsUom && (
               <View style={styles.infoMessage}>
                 <Ionicons
@@ -175,13 +205,31 @@ const QuantityModal = ({
                 <Text style={styles.currencyPrefix}>Rs.</Text>
                 <TextInput
                   style={[styles.input, { flex: 1 }]}
-                  value={price}
-                  onChangeText={setPrice}
+                  value={priceValue}
+                  onChangeText={setPriceValue}
                   keyboardType="numeric"
                   placeholder="Enter price"
                   placeholderTextColor={colors.textSecondary}
                 />
               </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Discount (text1)</Text>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  value={discount}
+                  onChangeText={setDiscount}
+                  keyboardType="numeric"
+                  placeholder="Enter discount amount"
+                  placeholderTextColor={colors.textSecondary}
+                />
+                <Text style={styles.inputSuffix}>Rs.</Text>
+              </View>
+              <Text style={styles.noteText}>
+                Note: Discount should be less than price
+              </Text>
             </View>
 
             <View style={styles.summary}>
@@ -197,9 +245,15 @@ const QuantityModal = ({
                 </Text>
               </View>
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryText}>Total Price:</Text>
+                <Text style={styles.summaryText}>Price:</Text>
                 <Text style={styles.summaryValue}>
-                  Rs. {parseFloat(price || 0).toLocaleString()}
+                  Rs. {parseFloat(priceValue || 0).toLocaleString()}
+                </Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryText}>Discount:</Text>
+                <Text style={styles.summaryValue}>
+                  Rs. {parseFloat(discount || 0).toLocaleString()}
                 </Text>
               </View>
             </View>
@@ -351,6 +405,12 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginRight: 8,
     fontWeight: '500',
+  },
+  noteText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   summary: {
     backgroundColor: colors.card,

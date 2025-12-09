@@ -217,6 +217,7 @@ const ProductDetailsScreen = ({ route, navigation }) => {
         productName={basicInfo.description || 'Product'}
         stockId={stockId}
         uom={basicInfo.units}
+        price={basicInfo.sq_price}
       />
     </View>
   );

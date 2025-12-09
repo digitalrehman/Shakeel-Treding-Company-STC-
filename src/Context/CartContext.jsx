@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext } from 'react';
 import { useSelector } from 'react-redux';
+import { API_URL } from '@env';
 
 const CartContext = createContext();
 
@@ -21,7 +22,6 @@ export const CartProvider = ({ children }) => {
     };
 
     setCartItems(prev => [...prev, cartItem]);
-    console.log('Item added to cart. UOM:', cartItem.uom);
   };
 
   const removeFromCart = id => {
@@ -45,131 +45,121 @@ export const CartProvider = ({ children }) => {
 
       const currentUserId = id;
 
-      // Prepare sales_order_details array
-      const sales_order_details = cartItems.map(item => ({
-        stock_id: item.stockId,
-        description: item.productName,
-        box: item.boxes || 0,
-        pec: item.pieces || 0,
-        unit_price: item.price || 0,
-      }));
+      const sales_order_details = cartItems.map(item => {
+        const box = parseFloat(item.boxes) || 0;
+        const pec = parseFloat(item.pieces) || 0;
+        const pc_packing = parseFloat(item.basicInfo?.packing) || 1;
 
-      // Calculate total
-      let total = 0;
-      sales_order_details.forEach((item, index) => {
-        const box = parseFloat(item.box) || 0;
-        const pec = parseFloat(item.pec) || 0;
-        const unit_price = parseFloat(item.unit_price) || 0;
+        const quantity = box * pc_packing + pec;
+        const amount6 = parseFloat(item.price) || 0;
+        const unit_price = amount6 * pc_packing;
 
-        const pc_packing =
-          parseFloat(cartItems[index]?.basicInfo?.packing) || 1;
-        const sqr_m = box * pc_packing + pec * pc_packing;
-        total += sqr_m * unit_price;
+        const text1 = parseFloat(item.discount) || 0;
+
+        const new_discount = quantity * text1;
+        const gross = amount6 * quantity;
+
+        let discount_percent = 0;
+        if (gross > 0) {
+          discount_percent = (new_discount / gross) * 100;
+          if (discount_percent > 100) discount_percent = 100;
+        }
+
+        return {
+          stock_id: item.stockId || '',
+          description: item.productName || '',
+          box: box,
+          pec: pec,
+          amount6: amount6,
+          quantity: quantity,
+          unit_price: unit_price,
+          text1: text1,
+          discount_percent: discount_percent.toFixed(2),
+        };
       });
 
-      // Create FormData object
+      let total = 0;
+      sales_order_details.forEach(i => {
+        total += parseFloat(i.quantity) * parseFloat(i.unit_price);
+      });
+
+      // IMPORTANT FIXES
+      // Backend expects 32 for both Order and Quotation
+      const trans_type = orderData.document_type === 'Quotation' ? 32 : 33;
+
+      // Backend expects "10:00:00 AM" format
+      const formattedTime = new Date().toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+      });
+
       const formData = new FormData();
 
       formData.append('party_name', orderData.customer_name || '');
       formData.append('function_date', new Date().toISOString().split('T')[0]);
       formData.append('contact_no', orderData.contact_number || '');
-      formData.append('venue', '');
+      formData.append('venue', orderData.venue || '');
       formData.append('total', total.toFixed(2));
-      formData.append('so_advance', '');
+
+      // Advance is required. You can set 0 if allowed.
+      formData.append('so_advance', orderData.so_advance || '0');
+
       formData.append('user_id', currentUserId.toString());
       formData.append(
         'sales_order_details',
         JSON.stringify(sales_order_details),
       );
-      formData.append('bank_id', '');
+
+      // Backend expects numeric bank_id even if empty
+      formData.append('bank_id', orderData.bank_id || '0');
+
       formData.append('update_id', '0');
-      formData.append('comments', '');
+      formData.append('comments', orderData.comments || '');
       formData.append('discount1', '0');
-      formData.append(
-        'f_time',
-        new Date().toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-        }),
-      );
-      formData.append('order_type', '32');
 
-      // Log what we're sending
-      console.log('Sending FormData with fields:');
-      console.log('party_name:', orderData.customer_name);
-      console.log('contact_no:', orderData.contact_number);
-      console.log('user_id:', currentUserId);
-      console.log('total:', total.toFixed(2));
-      console.log('sales_order_details:', JSON.stringify(sales_order_details));
+      formData.append('f_time', formattedTime);
+      formData.append('order_type', '1');
+      formData.append('trans_type', trans_type.toString());
 
-      // Send as FormData
-      const response = await fetch(
-        'https://t.de2solutions.com/mobile_dash/post_event_quotation.php',
-        {
-          method: 'POST',
-          // DO NOT set Content-Type header - let React Native set it automatically
-          body: formData,
-        },
-      );
+      formData.append('func_type', '0');
+      formData.append('function_ceremony', '');
+      formData.append('function_arranged', '');
+      formData.append('function_location', '');
+      formData.append('so_ref', '');
+      formData.append('created_by', currentUserId.toString());
+
+      console.log('Sending FormData...', formData);
+      const response = await fetch(`${API_URL}post_event_quotation.php`, {
+        method: 'POST',
+        body: formData,
+      });
 
       const responseText = await response.text();
       console.log('Raw API Response:', responseText);
 
-      // Extract JSON from the response (remove the SQL insert statement)
-      let jsonString = responseText;
-
-      // Find the JSON part in the response
-      const jsonStartIndex = responseText.indexOf('{');
-      const jsonEndIndex = responseText.lastIndexOf('}') + 1;
-
-      if (jsonStartIndex !== -1 && jsonEndIndex !== -1) {
-        jsonString = responseText.substring(jsonStartIndex, jsonEndIndex);
-        console.log('Extracted JSON:', jsonString);
-      }
-
       let result;
       try {
-        result = JSON.parse(jsonString);
+        result = JSON.parse(responseText);
       } catch (e) {
-        console.error('Failed to parse JSON response:', e);
-        console.error('Problematic JSON string:', jsonString);
-        // If we can't parse it, check if it contains success keywords
-        if (
-          responseText.includes('"status":true') ||
-          responseText.includes('status":true')
-        ) {
-          result = { status: true };
-        } else if (
-          responseText.includes('INSERT INTO') &&
-          responseText.includes('"status":true')
-        ) {
-          // If it contains SQL and status true, consider it successful
-          result = { status: true };
-        } else {
-          throw new Error('Invalid response from server');
-        }
+        throw new Error('Invalid response: ' + responseText);
       }
 
-      console.log('Parsed API Response:', result);
-
-      // Check if status is true
-      if (result.status === true || result.status === 'true') {
+      if (result.status === true) {
         clearCart();
         return {
           success: true,
-          orderId: result.order_id || result.order_no || `ORD-${Date.now()}`,
+          orderId: result.order_no || result.order_id || `ORD-${Date.now()}`,
           apiResponse: result,
           message: result.message || 'Order submitted successfully',
         };
       } else {
-        throw new Error(
-          result.message || result.error || 'Order submission failed',
-        );
+        throw new Error(result.message || 'Order submission failed');
       }
-    } catch (error) {
-      console.error('Order submission error:', error);
-      throw error;
+    } catch (e) {
+      console.error('Order submission error:', e);
+      throw e;
     }
   };
 
