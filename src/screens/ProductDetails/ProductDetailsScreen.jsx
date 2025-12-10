@@ -16,8 +16,9 @@ import QuantityModal from '../../components/QuantityModal';
 const { width } = Dimensions.get('window');
 
 const ProductDetailsScreen = ({ route, navigation }) => {
-  const { productData, stockId } = route.params;
-  const { addToCart, cartCount } = useCart();
+  const { productData, stockId, editMode, initialQuantity, oldItemId } =
+    route.params;
+  const { addToCart, cartCount, removeFromCart } = useCart();
 
   const [quantityModalVisible, setQuantityModalVisible] = useState(false);
 
@@ -25,6 +26,13 @@ const ProductDetailsScreen = ({ route, navigation }) => {
   const locations = productData.data || [];
   const showroomData = productData.data_show || [];
   const [currentDateTime, setCurrentDateTime] = useState('');
+
+  // Auto-open modal if in edit mode
+  useEffect(() => {
+    if (editMode && initialQuantity) {
+      setQuantityModalVisible(true);
+    }
+  }, [editMode, initialQuantity]);
 
   // Set cart button in header
   React.useLayoutEffect(() => {
@@ -101,6 +109,11 @@ const ProductDetailsScreen = ({ route, navigation }) => {
   }, []);
 
   const handleAddToCart = quantityInfo => {
+    // If editing, remove the old item first
+    if (editMode && oldItemId) {
+      removeFromCart(oldItemId);
+    }
+
     addToCart(
       {
         stockId,
@@ -109,6 +122,11 @@ const ProductDetailsScreen = ({ route, navigation }) => {
       },
       quantityInfo,
     );
+
+    // If editing, navigate back to cart
+    if (editMode) {
+      navigation.navigate('CartScreen');
+    }
   };
 
   return (
@@ -218,6 +236,7 @@ const ProductDetailsScreen = ({ route, navigation }) => {
         stockId={stockId}
         uom={basicInfo.units}
         price={basicInfo.sq_price}
+        initialValues={editMode ? initialQuantity : null}
       />
     </View>
   );

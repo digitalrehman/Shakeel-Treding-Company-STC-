@@ -22,6 +22,7 @@ const QuantityModal = ({
   stockId,
   uom = '',
   price = 0,
+  initialValues = null,
 }) => {
   const [boxes, setBoxes] = useState('');
   const [pieces, setPieces] = useState('');
@@ -32,10 +33,17 @@ const QuantityModal = ({
     uom.toLowerCase().includes('pcs') || uom.toLowerCase().includes('piece');
 
   useEffect(() => {
-    if (price && price > 0) {
+    if (initialValues) {
+      setBoxes(initialValues.boxes ? initialValues.boxes.toString() : '');
+      setPieces(initialValues.pieces ? initialValues.pieces.toString() : '');
+      setPriceValue(initialValues.price ? initialValues.price.toString() : '');
+      setDiscount(
+        initialValues.discount ? initialValues.discount.toString() : '',
+      );
+    } else if (price && price > 0) {
       setPriceValue(price.toString());
     }
-  }, [price, visible]);
+  }, [price, visible, initialValues]);
 
   const handleSubmit = () => {
     if (isPcsUom) {

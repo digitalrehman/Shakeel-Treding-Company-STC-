@@ -15,13 +15,7 @@ import { useCart } from '../../Context/CartContext';
 import { colors } from '../../utils/color';
 
 const CartScreen = ({ navigation }) => {
-  const {
-    cartItems,
-    removeFromCart,
-    submitOrder,
-    updateCustomerInfo,
-    clearCart,
-  } = useCart();
+  const { cartItems, removeFromCart, submitOrder } = useCart();
   const [customerModalVisible, setCustomerModalVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [name, setName] = useState('');
@@ -205,16 +199,43 @@ const CartScreen = ({ navigation }) => {
                   <Text style={styles.itemTitle} numberOfLines={1}>
                     {item.productName}
                   </Text>
-                  <TouchableOpacity
-                    onPress={() => handleRemoveItem(item.id, item.productName)}
-                    style={styles.deleteButton}
-                  >
-                    <Ionicons
-                      name="trash-outline"
-                      size={20}
-                      color={colors.danger}
-                    />
-                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <TouchableOpacity
+                      onPress={() =>
+                        navigation.navigate('ProductDetails', {
+                          productData: item.productData,
+                          stockId: item.stockId,
+                          editMode: true,
+                          oldItemId: item.id,
+                          initialQuantity: {
+                            boxes: item.boxes,
+                            pieces: item.pieces,
+                            discount: item.discount,
+                            price: item.price,
+                          },
+                        })
+                      }
+                      style={[styles.deleteButton, { marginRight: 8 }]}
+                    >
+                      <Ionicons
+                        name="create-outline"
+                        size={20}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() =>
+                        handleRemoveItem(item.id, item.productName)
+                      }
+                      style={styles.deleteButton}
+                    >
+                      <Ionicons
+                        name="trash-outline"
+                        size={20}
+                        color={colors.danger}
+                      />
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 <Text style={styles.stockId}>Stock ID: {item.stockId}</Text>

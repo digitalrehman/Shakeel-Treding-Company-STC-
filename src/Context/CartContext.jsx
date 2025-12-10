@@ -18,6 +18,7 @@ export const CartProvider = ({ children }) => {
       basicInfo: productData.basicInfo,
       uom: quantityInfo.uom || productData.basicInfo?.units || '',
       ...quantityInfo,
+      productData: productData,
       addedAt: new Date().toISOString(),
     };
 
@@ -75,21 +76,16 @@ export const CartProvider = ({ children }) => {
           quantity: quantity,
           unit_price: unit_price,
           text1: text1,
-          discount_percent: discount_percent.toFixed(2),
+          discount_percent: discount_percent.toFixed(2) / 100,
         };
       });
-      // 8031067
       let total = 0;
       sales_order_details.forEach(i => {
         total +=
           parseFloat(i.quantity) *
           parseFloat(i.unit_price) *
           (1 - parseFloat(i.discount_percent) / 100);
-        console.log('discount_percent', 1 - parseFloat(i.discount_percent));
-        console.log('unit_price', parseFloat(i.unit_price));
-        console.log('quantity', parseFloat(i.quantity));
       });
-      console.log('total', total);
 
       const trans_type = orderData.document_type === 'Quotation' ? 32 : 30;
 
