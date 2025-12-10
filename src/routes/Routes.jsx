@@ -7,6 +7,7 @@ import ProductDetailsScreen from '../screens/ProductDetails/ProductDetailsScreen
 import UploadPicScreen from '../screens/modules/Upload/UploadPicScreen';
 import CartScreen from '../screens/ProductDetails/CartScreen';
 import InquiryScreen from '../screens/InquiryScreen';
+import InquiryDetailsScreen from '../screens/InquiryDetailsScreen';
 import { colors } from '../utils/color';
 
 const Stack = createNativeStackNavigator();
@@ -66,6 +67,10 @@ export const Routes = () => {
           />
           <Stack.Screen name="UploadPicScreen" component={UploadPicScreen} />
           <Stack.Screen name="InquiryScreen" component={InquiryScreen} />
+          <Stack.Screen
+            name="InquiryDetailsScreen"
+            component={InquiryDetailsScreen}
+          />
         </>
       ) : (
         <>

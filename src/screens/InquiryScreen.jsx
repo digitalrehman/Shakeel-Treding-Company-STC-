@@ -143,7 +143,15 @@ const InquiryScreen = ({ navigation }) => {
 
         {/* Bottom actions */}
         <View style={styles.cardFooter}>
-          <TouchableOpacity style={styles.detailsButton}>
+          <TouchableOpacity
+            style={styles.detailsButton}
+            onPress={() =>
+              navigation.navigate('InquiryDetailsScreen', {
+                order_no: item.order_no || item.trans_no,
+                type: item.type,
+              })
+            }
+          >
             <Text style={styles.detailsButtonText}>View Details</Text>
             <Ionicons name="arrow-forward" size={16} color={colors.primary} />
           </TouchableOpacity>
