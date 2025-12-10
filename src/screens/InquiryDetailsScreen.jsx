@@ -32,7 +32,7 @@ const InquiryDetailsScreen = ({ route, navigation }) => {
       formData.append('trans_no', order_no);
       formData.append('type', type);
 
-      const response = await fetch(`${API_URL}/view_data.php`, {
+      const response = await fetch(`${API_URL}view_data.php`, {
         method: 'POST',
         body: formData,
       });
@@ -65,7 +65,7 @@ const InquiryDetailsScreen = ({ route, navigation }) => {
         value: headerData.reference,
         icon: 'document-text',
       },
-      { label: 'Transaction No', value: headerData.trans_no, icon: 'hashtag' },
+      { label: 'Transaction No', value: headerData.trans_no, icon: 'receipt' },
       { label: 'Date', value: headerData.trans_date, icon: 'calendar' },
       { label: 'Customer', value: headerData.name, icon: 'person' },
       { label: 'Salesman', value: headerData.salesman, icon: 'briefcase' },

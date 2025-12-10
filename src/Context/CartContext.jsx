@@ -38,6 +38,38 @@ export const CartProvider = ({ children }) => {
     setCustomerInfo(info);
   };
 
+  const loadCartFromOrder = items => {
+    const newCartItems = items.map(item => {
+      // Construct a minimal productData object
+      const productData = {
+        stockId: item.stk_code,
+        data_basic: {
+          description: item.description,
+          sq_price: item.sqprice || item.unit_price, // Fallback
+          units: 'Box', // Default assumption, or derive if possible
+          packing: '1', // Default
+        },
+      };
+
+      return {
+        id: item.id || Date.now().toString() + Math.random(),
+        productId: item.stk_code,
+        productName: item.description,
+        stockId: item.stk_code,
+        basicInfo: productData.data_basic,
+        uom: item.pec ? 'Pcs' : 'Box', // Infer UOM
+        boxes: item.box || '0',
+        pieces: item.pec || item.quantity || '0',
+        price: item.unit_price || '0',
+        discount: item.discount_percent || '0',
+        productData: productData,
+        addedAt: new Date().toISOString(),
+      };
+    });
+
+    setCartItems(newCartItems);
+  };
+
   const submitOrder = async orderData => {
     try {
       if (cartItems.length === 0) {
@@ -161,7 +193,9 @@ export const CartProvider = ({ children }) => {
         removeFromCart,
         clearCart,
         updateCustomerInfo,
+        updateCustomerInfo,
         submitOrder,
+        loadCartFromOrder,
         cartCount: cartItems.length,
       }}
     >

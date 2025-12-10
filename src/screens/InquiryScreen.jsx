@@ -12,8 +12,11 @@ import CustomHeader from '../components/CustomHeader';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { colors } from '../utils/color';
 import { API_URL } from '@env';
+import { useCart } from '../Context/CartContext';
+import Toast from 'react-native-toast-message';
 
 const InquiryScreen = ({ navigation }) => {
+  const { loadCartFromOrder } = useCart();
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -22,16 +25,13 @@ const InquiryScreen = ({ navigation }) => {
   const fetchData = useCallback(async () => {
     try {
       setError(null);
-      const response = await fetch(`${API_URL}/pending_quotation.php`);
+      const response = await fetch(`${API_URL}pending_quotation.php`);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const jsonData = await response.json();
-      console.log('API Response:', jsonData);
-
-      // Handle the API response structure
       if (
         jsonData.status === 'true' &&
         jsonData.data &&
@@ -89,6 +89,46 @@ const InquiryScreen = ({ navigation }) => {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
+  };
+
+  const handleEditOrder = async orderNo => {
+    try {
+      setLoading(true);
+      const formData = new FormData();
+      formData.append('order_no', orderNo);
+
+      const response = await fetch(`${API_URL}pending_quotation_item.php`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (result.status === 'true' && result.data) {
+        loadCartFromOrder(result.data);
+        Toast.show({
+          type: 'success',
+          text1: 'Order Loaded',
+          text2: 'Order items have been loaded into cart',
+        });
+        navigation.navigate('CartScreen');
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Failed to load order items',
+        });
+      }
+    } catch (error) {
+      console.error('Edit order error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'An error occurred while loading order',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const CardItem = ({ item, index }) => (
@@ -155,6 +195,14 @@ const InquiryScreen = ({ navigation }) => {
             <Text style={styles.detailsButtonText}>View Details</Text>
             <Ionicons name="arrow-forward" size={16} color={colors.primary} />
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.detailsButton, { marginLeft: 8 }]}
+            onPress={() => handleEditOrder(item.order_no || item.trans_no)}
+          >
+            <Text style={styles.detailsButtonText}>Edit</Text>
+            <Ionicons name="create-outline" size={16} color={colors.primary} />
+          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -199,7 +247,7 @@ const InquiryScreen = ({ navigation }) => {
       <FlatList
         data={data}
         keyExtractor={(item, index) =>
-          item.reference || item.order_no || `item-${index}`
+          `${item.reference || item.order_no || 'item'}-${index}`
         }
         renderItem={({ item, index }) => <CardItem item={item} index={index} />}
         showsVerticalScrollIndicator={false}
