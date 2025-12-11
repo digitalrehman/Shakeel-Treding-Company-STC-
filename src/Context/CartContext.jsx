@@ -7,6 +7,7 @@ const CartContext = createContext();
 export const CartProvider = ({ children }) => {
   const [cartItems, setCartItems] = useState([]);
   const [customerInfo, setCustomerInfo] = useState(null);
+  const [updateId, setUpdateId] = useState('0');
   const { id } = useSelector(state => state.Data.currentData);
 
   const addToCart = (productData, quantityInfo) => {
@@ -32,22 +33,37 @@ export const CartProvider = ({ children }) => {
   const clearCart = () => {
     setCartItems([]);
     setCustomerInfo(null);
+    setUpdateId('0');
   };
 
   const updateCustomerInfo = info => {
     setCustomerInfo(info);
   };
 
-  const loadCartFromOrder = items => {
+  const loadCartFromOrder = (items, headerData = null) => {
     const newCartItems = items.map(item => {
-      // Construct a minimal productData object
+      const box = parseFloat(item.box) || 0;
+      const pec = parseFloat(item.pec) || 0;
+      const quantity = parseFloat(item.quantity) || 0;
+
+      let api_box = 0;
+      let api_pec = 1;
+
+      if (pec > 0) {
+        api_box = (quantity - box) / pec;
+      } else if (quantity > 0 && box > 0) {
+        api_box = 0;
+      }
+
       const productData = {
         stockId: item.stk_code,
         data_basic: {
           description: item.description,
-          sq_price: item.sqprice || item.unit_price, // Fallback
-          units: 'Box', // Default assumption, or derive if possible
-          packing: '1', // Default
+          sq_price: item.sqprice || item.unit_price,
+          units: 'Box',
+          packing: '1',
+          boxes: api_box.toString(),
+          Pcs: api_pec.toString(),
         },
       };
 
@@ -57,7 +73,7 @@ export const CartProvider = ({ children }) => {
         productName: item.description,
         stockId: item.stk_code,
         basicInfo: productData.data_basic,
-        uom: item.pec ? 'Pcs' : 'Box', // Infer UOM
+        uom: item.pec ? 'Pcs' : 'Box',
         boxes: item.box || '0',
         pieces: item.pec || item.quantity || '0',
         price: item.unit_price || '0',
@@ -68,6 +84,17 @@ export const CartProvider = ({ children }) => {
     });
 
     setCartItems(newCartItems);
+
+    if (headerData) {
+      setCustomerInfo({
+        name: headerData.name,
+        contactNo: headerData.contact_no,
+        documentType: headerData.type === '32' ? 'Quotation' : 'Order',
+      });
+      setUpdateId(headerData.order_no || '0');
+    } else {
+      setUpdateId('0');
+    }
   };
 
   const submitOrder = async orderData => {
@@ -118,7 +145,6 @@ export const CartProvider = ({ children }) => {
           parseFloat(i.unit_price) *
           (1 - parseFloat(i.discount_percent) / 100);
       });
-
       const trans_type = orderData.document_type === 'Quotation' ? 32 : 30;
 
       const formattedTime = new Date().toLocaleTimeString('en-US', {
@@ -137,7 +163,6 @@ export const CartProvider = ({ children }) => {
       formData.append('total', total.toFixed(2));
 
       formData.append('so_advance', orderData.so_advance || '0');
-
       formData.append('user_id', currentUserId.toString());
       formData.append(
         'sales_order_details',
@@ -146,26 +171,19 @@ export const CartProvider = ({ children }) => {
 
       formData.append('bank_id', '');
 
-      formData.append('update_id', '0');
+      formData.append('update_id', updateId);
       formData.append('comments', '');
       formData.append('discount1', '0');
 
       formData.append('f_time', formattedTime);
       formData.append('order_type', '1');
       formData.append('trans_type', trans_type.toString());
-
-      formData.append('func_type', '0');
-      formData.append('so_ref', '');
-      formData.append('created_by', currentUserId.toString());
-
-      console.log('Sending FormData...', formData);
       const response = await fetch(`${API_URL}post_event_quotation.php`, {
         method: 'POST',
         body: formData,
       });
 
       const result = await response.json();
-      console.log('Raw API Response:', result);
 
       if (result.status === true) {
         clearCart();

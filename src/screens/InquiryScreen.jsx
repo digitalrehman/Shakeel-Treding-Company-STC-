@@ -25,7 +25,16 @@ const InquiryScreen = ({ navigation }) => {
   const fetchData = useCallback(async () => {
     try {
       setError(null);
-      const response = await fetch(`${API_URL}pending_quotation.php`);
+      const response = await fetch(
+        `${API_URL}pending_quotation.php?_=${Date.now()}`,
+        {
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            Pragma: 'no-cache',
+            Expires: '0',
+          },
+        },
+      );
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -103,9 +112,10 @@ const InquiryScreen = ({ navigation }) => {
       });
 
       const result = await response.json();
+      console.log(result);
 
       if (result.status === 'true' && result.data) {
-        loadCartFromOrder(result.data);
+        loadCartFromOrder(result.data, result.header_data?.[0]);
         Toast.show({
           type: 'success',
           text1: 'Order Loaded',

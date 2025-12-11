@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,12 +15,20 @@ import { useCart } from '../../Context/CartContext';
 import { colors } from '../../utils/color';
 
 const CartScreen = ({ navigation }) => {
-  const { cartItems, removeFromCart, submitOrder } = useCart();
+  const { cartItems, removeFromCart, submitOrder, customerInfo } = useCart();
   const [customerModalVisible, setCustomerModalVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [name, setName] = useState('');
   const [contactNo, setContactNo] = useState('');
   const [documentType, setDocumentType] = useState('Order');
+
+  useEffect(() => {
+    if (customerInfo) {
+      setName(customerInfo.name || '');
+      setContactNo(customerInfo.contactNo || '');
+      setDocumentType(customerInfo.documentType || 'Order');
+    }
+  }, [customerInfo]);
 
   const calculateTotals = () => {
     let total = 0;
@@ -118,11 +126,9 @@ const CartScreen = ({ navigation }) => {
     } catch (error) {
       console.error('Order submission error:', error);
 
-      // Show more detailed error
       let errorMessage =
         error.message || 'Submission failed. Please try again.';
 
-      // Check for specific error patterns
       if (errorMessage.includes('status') && errorMessage.includes('false')) {
         errorMessage =
           'Server rejected the request. Please check the data and try again.';
