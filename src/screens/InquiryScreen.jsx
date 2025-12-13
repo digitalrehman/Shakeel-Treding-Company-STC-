@@ -150,26 +150,119 @@ const InquiryScreen = ({ navigation }) => {
     }
   };
 
+  const generatePDF = async (header, items) => {
+    try {
+      const pdfDoc = await PDFDocument.create();
+      const page = pdfDoc.addPage([595.28, 841.89]); // A4 size
+      const { width, height } = page.getSize();
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+      let y = height - 50;
+      const fontSize = 10;
+      const titleSize = 14;
+      const smallSize = 8;
+
+      // Helper to draw text
+      const drawText = (
+        text,
+        x,
+        y,
+        size = fontSize,
+        fontToUse = font,
+        color = rgb(0, 0, 0),
+      ) => {
+        page.drawText(String(text), { x, y, size, font: fontToUse, color });
+      };
+
+      // Helper to draw line
+      const drawLine = (x1, y1, x2, y2, thickness = 1) => {
+        page.drawLine({
+          start: { x: x1, y: y1 },
+          end: { x: x2, y: y2 },
+          thickness,
+          color: rgb(0, 0, 0),
+        });
+      };
+
       // --- Helper Functions ---
-      const numberToWords = (num) => {
-        const a = ['','One ','Two ','Three ','Four ','Five ','Six ','Seven ','Eight ','Nine ','Ten ','Eleven ','Twelve ','Thirteen ','Fourteen ','Fifteen ','Sixteen ','Seventeen ','Eighteen ','Nineteen '];
-        const b = ['', '', 'Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
-        
-        const n = ('000000000' + num).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
-        if (!n) return ''; 
+      const numberToWords = num => {
+        if (!num) return '';
+        const a = [
+          '',
+          'One ',
+          'Two ',
+          'Three ',
+          'Four ',
+          'Five ',
+          'Six ',
+          'Seven ',
+          'Eight ',
+          'Nine ',
+          'Ten ',
+          'Eleven ',
+          'Twelve ',
+          'Thirteen ',
+          'Fourteen ',
+          'Fifteen ',
+          'Sixteen ',
+          'Seventeen ',
+          'Eighteen ',
+          'Nineteen ',
+        ];
+        const b = [
+          '',
+          '',
+          'Twenty',
+          'Thirty',
+          'Forty',
+          'Fifty',
+          'Sixty',
+          'Seventy',
+          'Eighty',
+          'Ninety',
+        ];
+
+        const n = ('000000000' + num)
+          .slice(-9)
+          .match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+        if (!n) return '';
         let str = '';
-        str += (n[1] != 0) ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + 'Crore ' : '';
-        str += (n[2] != 0) ? (a[Number(n[2])] || b[n[2][0]] + ' ' + a[n[2][1]]) + 'Lakh ' : '';
-        str += (n[3] != 0) ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]) + 'Thousand ' : '';
-        str += (n[4] != 0) ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]) + 'Hundred ' : '';
-        str += (n[5] != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]) : '';
+        str +=
+          n[1] != 0
+            ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + 'Crore '
+            : '';
+        str +=
+          n[2] != 0
+            ? (a[Number(n[2])] || b[n[2][0]] + ' ' + a[n[2][1]]) + 'Lakh '
+            : '';
+        str +=
+          n[3] != 0
+            ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]) + 'Thousand '
+            : '';
+        str +=
+          n[4] != 0
+            ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]) + 'Hundred '
+            : '';
+        str +=
+          n[5] != 0
+            ? (str != '' ? 'and ' : '') +
+              (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]])
+            : '';
         return str + 'Only';
       };
 
       // --- Header ---
       // "SALES QUOTATION" Title
-      drawText('SALES QUOTATION', width - 250, y, 20, boldFont, rgb(0.6, 0.6, 0.6));
-      
+      drawText(
+        'SALES QUOTATION',
+        width - 250,
+        y,
+        20,
+        boldFont,
+        rgb(0.6, 0.6, 0.6),
+      );
+
       // Warehouse Info
       drawText('WAREHOUSE I-9:', 50, y, 10, boldFont);
       y -= 12;
@@ -182,15 +275,16 @@ const InquiryScreen = ({ navigation }) => {
       drawText('T.CHOWK: 1 KM-TCHOWK, NEAR NOOR MAHAL MARQUEE, GT', 50, y, 8);
       y -= 10;
       drawText('ROAD, RAWALPINDI. 051-3757525', 50, y, 8);
-      
+
       // Date and Quote No (Right side)
-      const dateStr = header.trans_date || new Date().toLocaleDateString('en-GB');
+      const dateStr =
+        header.trans_date || new Date().toLocaleDateString('en-GB');
       const quoteNo = header.trans_no || header.reference || '';
-      
+
       const rightColLabel = width - 200;
       const rightColValue = width - 100;
       const headerY = y + 30; // Align with address roughly
-      
+
       drawText('Date', rightColLabel, headerY, 9);
       drawText(dateStr, rightColValue, headerY, 9);
       drawText('Quotation No', rightColLabel, headerY - 12, 9);
@@ -210,9 +304,8 @@ const InquiryScreen = ({ navigation }) => {
 
       // --- Sales Person Box ---
       const boxTop = y;
-      const boxHeight = 25;
       const boxWidth = width - 100;
-      
+
       // Draw box background for header
       page.drawRectangle({
         x: 50,
@@ -238,20 +331,25 @@ const InquiryScreen = ({ navigation }) => {
       drawLine(50, y - 12, width - 50, y - 12);
 
       // Text
-      drawText('Sales Person', 50 + (boxWidth/4) - 25, y - 9, 9, boldFont);
-      drawText('Contact No', (width/2) + (boxWidth/4) - 25, y - 9, 9, boldFont);
-      
-      drawText(header.salesman || 'N/A', 50 + (boxWidth/4) - 30, y - 22, 9);
-      drawText(header.salesman_contact || '-', (width/2) + (boxWidth/4) - 30, y - 22, 9);
+      drawText('Sales Person', 50 + boxWidth / 4 - 25, y - 9, 9, boldFont);
+      drawText('Contact No', width / 2 + boxWidth / 4 - 25, y - 9, 9, boldFont);
+
+      drawText(header.salesman || 'N/A', 50 + boxWidth / 4 - 30, y - 22, 9);
+      drawText(
+        header.salesman_contact || '-',
+        width / 2 + boxWidth / 4 - 30,
+        y - 22,
+        9,
+      );
 
       y -= 40;
 
       // --- Items Table ---
       const tableTop = y;
-      const colX = [50, 75, 240, 280, 310, 340, 380, 410, 450, 490]; 
+      const colX = [50, 75, 240, 280, 310, 340, 380, 410, 450, 490];
       // Sr, Product, Packing, Box, Pc, Qty, Uom, Rate, Disc, Amount
       const colWidths = [25, 165, 40, 30, 30, 40, 30, 40, 40, 55]; // Approximate widths
-      
+
       // Table Header Background
       page.drawRectangle({
         x: 50,
@@ -262,7 +360,18 @@ const InquiryScreen = ({ navigation }) => {
       });
 
       // Table Header Text
-      const headers = ['Sr.', 'Product', 'Packing', 'Box', 'Pc', 'Qty', 'Uom', 'Rate', 'Disc', 'Amount'];
+      const headers = [
+        'Sr.',
+        'Product',
+        'Packing',
+        'Box',
+        'Pc',
+        'Qty',
+        'Uom',
+        'Rate',
+        'Disc',
+        'Amount',
+      ];
       headers.forEach((h, i) => {
         // Center align headers roughly
         let xPos = colX[i];
@@ -281,20 +390,16 @@ const InquiryScreen = ({ navigation }) => {
         borderWidth: 1,
       });
 
-      // Vertical Lines for Header
-      // (Optional: can add vertical lines to header if needed, but simple box is often enough)
-
       y -= 25;
-      const startY = y;
 
       // Items Loop
       let totalAmount = 0;
-      
+
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        
+
         drawText((i + 1).toString(), colX[0] + 2, y, 8);
-        
+
         // Product Description
         let desc = item.description || '';
         if (desc.length > 35) desc = desc.substring(0, 32) + '...';
@@ -305,44 +410,65 @@ const InquiryScreen = ({ navigation }) => {
         drawText(item.pc || '-', colX[4] + 5, y, 8);
         drawText(item.qty || '-', colX[5] + 5, y, 8);
         drawText(item.uom || '-', colX[6] + 5, y, 8);
-        
+
         const rate = item.rate || item.unit_price || '-';
         drawText(rate.toString(), colX[7], y, 8);
-        
+
         const disc = item.disc || '0.00';
         drawText(disc.toString(), colX[8] + 5, y, 8);
-        
+
         const amount = item.amount || item.total || '0';
         // Right align amount
         const amountWidth = font.widthOfTextAtSize(amount.toString(), 8);
-        drawText(amount.toString(), colX[9] + colWidths[9] - amountWidth - 5, y, 8);
+        drawText(
+          amount.toString(),
+          colX[9] + colWidths[9] - amountWidth - 5,
+          y,
+          8,
+        );
 
         // Long description
         if (item.long_description) {
-           y -= 10;
-           drawText(item.long_description, colX[1], y, 7, font, rgb(0.4, 0.4, 0.4));
+          y -= 10;
+          drawText(
+            item.long_description,
+            colX[1],
+            y,
+            7,
+            font,
+            rgb(0.4, 0.4, 0.4),
+          );
         }
 
         y -= 12;
 
         // Calculate total
-        const val = parseFloat((amount.toString()).replace(/,/g, ''));
+        const val = parseFloat(amount.toString().replace(/,/g, ''));
         if (!isNaN(val)) totalAmount += val;
       }
 
       // --- Totals Section (Inside Table Box) ---
       y -= 20; // Space before totals
-      
+
       const discount = parseFloat(header.discount || 0);
       const finalTotal = totalAmount - discount;
-      const formatNum = (n) => n.toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const formatNum = n =>
+        n.toLocaleString('en-PK', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
 
       const labelX = 400;
       const valueX = 490;
 
       drawText('Sub-total', labelX, y, 8, boldFont);
       let valWidth = font.widthOfTextAtSize(formatNum(totalAmount), 8);
-      drawText(formatNum(totalAmount), valueX + colWidths[9] - valWidth - 5, y, 8);
+      drawText(
+        formatNum(totalAmount),
+        valueX + colWidths[9] - valWidth - 5,
+        y,
+        8,
+      );
       y -= 12;
 
       drawText('Discount', labelX, y, 8, boldFont);
@@ -352,14 +478,20 @@ const InquiryScreen = ({ navigation }) => {
 
       drawText('QUOTATION TOTAL', labelX - 20, y, 9, boldFont);
       valWidth = boldFont.widthOfTextAtSize(formatNum(finalTotal), 9);
-      drawText(formatNum(finalTotal), valueX + colWidths[9] - valWidth - 5, y, 9, boldFont);
-      
+      drawText(
+        formatNum(finalTotal),
+        valueX + colWidths[9] - valWidth - 5,
+        y,
+        9,
+        boldFont,
+      );
+
       y -= 10; // Bottom padding
 
       // Draw Main Table Border (from header bottom to current y)
       const tableBottom = y;
       const tableHeight = tableTop - 15 - tableBottom;
-      
+
       page.drawRectangle({
         x: 50,
         y: tableBottom,
@@ -370,13 +502,8 @@ const InquiryScreen = ({ navigation }) => {
       });
 
       // Vertical Lines for Columns (Full Height)
-      // We need to draw lines from tableTop - 15 down to tableBottom
-      // Columns: Sr | Product | Packing | Box | Pc | Qty | Uom | Rate | Disc | Amount
-      // X positions correspond to colX values roughly, need to adjust for borders
-      
-      // Helper for vertical line
-      const drawVert = (x) => drawLine(x, tableTop - 15, x, tableBottom);
-      
+      const drawVert = x => drawLine(x, tableTop - 15, x, tableBottom);
+
       drawVert(colX[1] - 2); // After Sr
       drawVert(colX[2] - 2); // After Product
       drawVert(colX[3] - 2); // After Packing
