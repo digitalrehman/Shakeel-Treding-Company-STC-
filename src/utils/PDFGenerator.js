@@ -1,0 +1,365 @@
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import ReactNativeBlobUtil from 'react-native-blob-util';
+
+const numberToWords = num => {
+  if (!num) return '';
+  const a = [
+    '',
+    'One ',
+    'Two ',
+    'Three ',
+    'Four ',
+    'Five ',
+    'Six ',
+    'Seven ',
+    'Eight ',
+    'Nine ',
+    'Ten ',
+    'Eleven ',
+    'Twelve ',
+    'Thirteen ',
+    'Fourteen ',
+    'Fifteen ',
+    'Sixteen ',
+    'Seventeen ',
+    'Eighteen ',
+    'Nineteen ',
+  ];
+  const b = [
+    '',
+    '',
+    'Twenty',
+    'Thirty',
+    'Forty',
+    'Fifty',
+    'Sixty',
+    'Seventy',
+    'Eighty',
+    'Ninety',
+  ];
+
+  const n = ('000000000' + num)
+    .slice(-9)
+    .match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+  if (!n) return '';
+  let str = '';
+  str +=
+    n[1] != 0
+      ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + 'Crore '
+      : '';
+  str +=
+    n[2] != 0
+      ? (a[Number(n[2])] || b[n[2][0]] + ' ' + a[n[2][1]]) + 'Lakh '
+      : '';
+  str +=
+    n[3] != 0
+      ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]) + 'Thousand '
+      : '';
+  str +=
+    n[4] != 0
+      ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]) + 'Hundred '
+      : '';
+  str +=
+    n[5] != 0
+      ? (str != '' ? 'and ' : '') +
+        (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]])
+      : '';
+  return str + 'Only';
+};
+
+export const generatePDF = async (header, items) => {
+  try {
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([595.28, 841.89]); // A4 size
+    const { width, height } = page.getSize();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    let y = height - 50;
+    const fontSize = 10;
+    const smallSize = 8;
+
+    const drawText = (
+      text,
+      x,
+      y,
+      size = fontSize,
+      fontToUse = font,
+      color = rgb(0, 0, 0),
+    ) => {
+      page.drawText(String(text || ''), { x, y, size, font: fontToUse, color });
+    };
+
+    const drawLine = (x1, y1, x2, y2, thickness = 1) => {
+      page.drawLine({
+        start: { x: x1, y: y1 },
+        end: { x: x2, y: y2 },
+        thickness,
+        color: rgb(0, 0, 0),
+      });
+    };
+
+    // --- Header ---
+    drawText(
+      'SALES QUOTATION',
+      width - 250,
+      y,
+      20,
+      boldFont,
+      rgb(0.6, 0.6, 0.6),
+    );
+
+    drawText('WAREHOUSE I-9:', 50, y, 10, boldFont);
+    y -= 12;
+    drawText('PLOT NO 231-232, ST NO. 7, I-9/2, ISLAMABAD.', 50, y, 8);
+    y -= 10;
+    drawText('(7) 051-6133238, (8) 051-6130686, (9) 051-2751461', 50, y, 8);
+    y -= 20;
+
+    drawText('T.CHOWK: 1 KM-TCHOWK, NEAR NOOR MAHAL MARQUEE, GT', 50, y, 8);
+    y -= 10;
+    drawText('ROAD, RAWALPINDI. 051-3757525', 50, y, 8);
+
+    const dateStr = header.trans_date || new Date().toLocaleDateString('en-GB');
+    const quoteNo = header.trans_no || header.reference || '';
+
+    const rightColLabel = width - 200;
+    const rightColValue = width - 100;
+    const headerY = y + 30;
+
+    drawText('Date', rightColLabel, headerY, 9);
+    drawText(dateStr, rightColValue, headerY, 9);
+    drawText('Quotation No', rightColLabel, headerY - 12, 9);
+    drawText(quoteNo, rightColValue, headerY - 12, 9);
+
+    y -= 20;
+    drawLine(50, y, width - 50, y, 1.5);
+    y -= 15;
+
+    // --- Customer Section ---
+    drawText('Customer', 50, y, 10, boldFont);
+    y -= 15;
+    drawText(header.name || 'N/A', 50, y, 10, boldFont);
+    y -= 12;
+    drawText(header.phone || '', 50, y, 10);
+    y -= 25;
+
+    // --- Sales Person Box ---
+    const boxWidth = width - 100;
+
+    page.drawRectangle({
+      x: 50,
+      y: y - 12,
+      width: boxWidth,
+      height: 12,
+      color: rgb(0.85, 0.85, 0.85),
+    });
+
+    page.drawRectangle({
+      x: 50,
+      y: y - 25,
+      width: boxWidth,
+      height: 25,
+      borderColor: rgb(0, 0, 0),
+      borderWidth: 1,
+    });
+
+    drawLine(width / 2, y, width / 2, y - 25);
+    drawLine(50, y - 12, width - 50, y - 12);
+
+    drawText('Sales Person', 50 + boxWidth / 4 - 25, y - 9, 9, boldFont);
+    drawText('Contact No', width / 2 + boxWidth / 4 - 25, y - 9, 9, boldFont);
+
+    drawText(header.salesman || 'N/A', 50 + boxWidth / 4 - 30, y - 22, 9);
+    drawText(
+      header.salesman_contact || '-',
+      width / 2 + boxWidth / 4 - 30,
+      y - 22,
+      9,
+    );
+
+    y -= 40;
+
+    // --- Items Table ---
+    const tableTop = y;
+    const colX = [50, 75, 240, 280, 310, 340, 380, 410, 450, 490];
+    const colWidths = [25, 165, 40, 30, 30, 40, 30, 40, 40, 55];
+
+    page.drawRectangle({
+      x: 50,
+      y: y - 15,
+      width: width - 100,
+      height: 15,
+      color: rgb(0.85, 0.85, 0.85),
+    });
+
+    const headers = [
+      'Sr.',
+      'Product',
+      'Packing',
+      'Box',
+      'Pc',
+      'Qty',
+      'Uom',
+      'Rate',
+      'Disc',
+      'Amount',
+    ];
+    headers.forEach((h, i) => {
+      let xPos = colX[i];
+      if (i > 1) xPos += 2;
+      if (i === 9) xPos += 10;
+      drawText(h, xPos, y - 11, 8, boldFont);
+    });
+
+    page.drawRectangle({
+      x: 50,
+      y: y - 15,
+      width: width - 100,
+      height: 15,
+      borderColor: rgb(0, 0, 0),
+      borderWidth: 1,
+    });
+
+    y -= 25;
+
+    let totalAmount = 0;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+
+      drawText((i + 1).toString(), colX[0] + 2, y, 8);
+
+      let desc = item.description || '';
+      if (desc.length > 35) desc = desc.substring(0, 32) + '...';
+      drawText(desc, colX[1], y, 8);
+
+      drawText(item.packing || '-', colX[2] + 5, y, 8);
+      drawText(item.box || '-', colX[3] + 5, y, 8);
+      drawText(item.pec || item.pc || '-', colX[4] + 5, y, 8);
+      drawText(item.quantity || item.qty || '-', colX[5] + 5, y, 8);
+      drawText(item.uom || 'sqm', colX[6] + 5, y, 8);
+
+      const rate = item.unit_price || item.rate || '0';
+      drawText(rate.toString(), colX[7], y, 8);
+
+      const disc = item.discount_percent || item.disc || '0.00';
+      drawText(disc.toString(), colX[8] + 5, y, 8);
+
+      // Calculate Amount: Quantity * Unit Price
+      const qty = parseFloat(item.quantity || item.qty || 0);
+      const unitPrice = parseFloat(item.unit_price || item.rate || 0);
+      const rowAmount = qty * unitPrice;
+      const amountStr = rowAmount.toLocaleString('en-PK', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+
+      const amountWidth = font.widthOfTextAtSize(amountStr, 8);
+      drawText(amountStr, colX[9] + colWidths[9] - amountWidth - 5, y, 8);
+
+      if (item.long_description) {
+        y -= 10;
+        drawText(
+          item.long_description,
+          colX[1],
+          y,
+          7,
+          font,
+          rgb(0.4, 0.4, 0.4),
+        );
+      }
+
+      y -= 12;
+      totalAmount += rowAmount;
+    }
+
+    y -= 5;
+    const tableBottom = y;
+    const tableHeight = tableTop - 15 - tableBottom;
+
+    page.drawRectangle({
+      x: 50,
+      y: tableBottom,
+      width: width - 100,
+      height: tableHeight,
+      borderColor: rgb(0, 0, 0),
+      borderWidth: 1,
+    });
+
+    const drawLineVert = x => drawLine(x, tableTop - 15, x, tableBottom);
+
+    drawLineVert(colX[1] - 2);
+    drawLineVert(colX[2] - 2);
+    drawLineVert(colX[3] - 2);
+    drawLineVert(colX[4] - 2);
+    drawLineVert(colX[5] - 2);
+    drawLineVert(colX[6] - 2);
+    drawLineVert(colX[7] - 2);
+    drawLineVert(colX[8] - 2);
+    drawLineVert(colX[9] - 2);
+
+    // --- Totals Section ---
+    y -= 20;
+
+    const discount = parseFloat(header.discount || 0);
+    const finalTotal = totalAmount - discount;
+    const formatNum = n =>
+      n.toLocaleString('en-PK', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+
+    const labelX = 400;
+    const valueX = 490;
+
+    drawText('Sub-total', labelX, y, 8, boldFont);
+    let valWidth = font.widthOfTextAtSize(formatNum(totalAmount), 8);
+    drawText(
+      formatNum(totalAmount),
+      valueX + colWidths[9] - valWidth - 5,
+      y,
+      8,
+    );
+    y -= 12;
+
+    drawText('Discount', labelX, y, 8, boldFont);
+    valWidth = font.widthOfTextAtSize(formatNum(discount), 8);
+    drawText(formatNum(discount), valueX + colWidths[9] - valWidth - 5, y, 8);
+    y -= 12;
+
+    drawText('QUOTATION TOTAL', labelX - 20, y, 9, boldFont);
+    valWidth = boldFont.widthOfTextAtSize(formatNum(finalTotal), 9);
+    drawText(
+      formatNum(finalTotal),
+      valueX + colWidths[9] - valWidth - 5,
+      y,
+      9,
+      boldFont,
+    );
+
+    y -= 20;
+
+    drawText(`Amount in words: ${numberToWords(finalTotal)}`, 50, y, 8);
+    y -= 40;
+
+    // --- Signatures ---
+    const sigY = y;
+    drawText('FAIZAN', 100, sigY);
+    drawLine(80, sigY - 5, 180, sigY - 5);
+    drawText('Prepared By', 100, sigY - 15, 8);
+
+    drawLine(width - 180, sigY - 5, width - 80, sigY - 5);
+    drawText('Approved By', width - 160, sigY - 15, 8);
+
+    const pdfBase64 = await pdfDoc.saveAsBase64();
+    const fileName = `Quotation_${quoteNo}.pdf`;
+    const path = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/${fileName}`;
+
+    await ReactNativeBlobUtil.fs.writeFile(path, pdfBase64, 'base64');
+    return path;
+  } catch (error) {
+    console.error('PDF Generation Error:', error);
+    throw error;
+  }
+};
