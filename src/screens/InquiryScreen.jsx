@@ -7,6 +7,8 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   FlatList,
+  Platform,
+  PermissionsAndroid,
 } from 'react-native';
 import CustomHeader from '../components/CustomHeader';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -14,6 +16,14 @@ import { colors } from '../utils/color';
 import { API_URL } from '@env';
 import { useCart } from '../Context/CartContext';
 import Toast from 'react-native-toast-message';
+import Share from 'react-native-share';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import ReactNativeBlobUtil from 'react-native-blob-util';
+import { decode } from 'base-64';
+
+if (typeof atob === 'undefined') {
+  global.atob = decode;
+}
 
 const InquiryScreen = ({ navigation }) => {
   const { loadCartFromOrder } = useCart();
@@ -21,6 +31,7 @@ const InquiryScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [sharingId, setSharingId] = useState(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -88,12 +99,10 @@ const InquiryScreen = ({ navigation }) => {
 
   const formatCurrency = amount => {
     if (!amount && amount !== 0) return 'N/A';
-    // Convert string to number if needed
     const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
 
     if (isNaN(numAmount)) return 'Invalid amount';
 
-    // Format as PKR currency
     return `Rs ${numAmount.toLocaleString('en-PK', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
@@ -141,10 +150,302 @@ const InquiryScreen = ({ navigation }) => {
     }
   };
 
+  const generatePDF = async (header, items) => {
+    try {
+      const pdfDoc = await PDFDocument.create();
+      const page = pdfDoc.addPage([595.28, 841.89]); // A4 size
+      const { width, height } = page.getSize();
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+      let y = height - 50;
+      const fontSize = 10;
+      const titleSize = 14;
+      const smallSize = 8;
+
+      // Helper to draw text
+      const drawText = (
+        text,
+        x,
+        y,
+        size = fontSize,
+        fontToUse = font,
+        color = rgb(0, 0, 0),
+      ) => {
+        page.drawText(String(text), { x, y, size, font: fontToUse, color });
+      };
+
+      // Helper to draw line
+      const drawLine = (x1, y1, x2, y2, thickness = 1) => {
+        page.drawLine({
+          start: { x: x1, y: y1 },
+          end: { x: x2, y: y2 },
+          thickness,
+          color: rgb(0, 0, 0),
+        });
+      };
+
+      // --- Header ---
+      drawText('WAREHOUSE I-9:', 50, y, titleSize, boldFont);
+      y -= 15;
+      drawText(
+        'PLOT NO 231-232, ST NO. 7, I-9/2, ISLAMABAD.',
+        50,
+        y,
+        smallSize,
+      );
+      y -= 12;
+      drawText(
+        '(7) 051-6133238, (8) 051-6130686, (9) 051-2751461',
+        50,
+        y,
+        smallSize,
+      );
+      y -= 25;
+
+      // Date and Quotation No
+      const dateStr =
+        header.trans_date || new Date().toLocaleDateString('en-GB');
+      const quoteNo = header.trans_no || header.reference || '';
+      drawText(`Date: ${dateStr}`, 50, y);
+      drawText(`Quotation No: ${quoteNo}`, width - 200, y);
+      y -= 20;
+
+      // Second Address
+      drawText(
+        'T.CHOWK: 1 KM-TCHOWK, NEAR NOOR MAHAL MARQUEE, GT ROAD, RAWALPINDI. 051-3757525',
+        50,
+        y,
+        smallSize,
+      );
+      y -= 30;
+
+      // Customer Section
+      drawLine(50, y + 10, width - 50, y + 10);
+      drawText('Customer', 50, y, 12, boldFont);
+      y -= 15;
+      drawText(header.name || 'N/A', 50, y, 12, boldFont);
+      y -= 15;
+      drawText(header.phone || '', 50, y);
+      y -= 30;
+
+      // Sales Person Table
+      const colSales1 = 50;
+      const colSales2 = 300;
+
+      drawText('Sales Person', colSales1, y, fontSize, boldFont);
+      drawText('Contact No', colSales2, y, fontSize, boldFont);
+      y -= 5;
+      drawLine(colSales1, y, width - 50, y);
+      y -= 15;
+      drawText(header.salesman || 'N/A', colSales1, y);
+      drawText(header.salesman_contact || '-', colSales2, y);
+      y -= 30;
+
+      // --- Items Table ---
+      const colX = [50, 80, 230, 270, 300, 330, 360, 400, 450, 490];
+      // Sr, Product, Packing, Box, Pc, Qty, Uom, Rate, Disc, Amount
+
+      // Table Header
+      const headers = [
+        'Sr.',
+        'Product',
+        'Pack',
+        'Box',
+        'Pc',
+        'Qty',
+        'Uom',
+        'Rate',
+        'Disc',
+        'Amount',
+      ];
+      headers.forEach((h, i) => {
+        drawText(h, colX[i], y, fontSize, boldFont);
+      });
+      y -= 5;
+      drawLine(50, y, width - 50, y);
+      y -= 15;
+
+      // Items Loop
+      let totalAmount = 0;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+
+        // Page break check
+        if (y < 50) {
+          // Add new page logic here if needed, for now just stop or continue off-page
+          // For simplicity in this version, we assume it fits or just truncates
+        }
+
+        drawText((i + 1).toString(), colX[0], y, smallSize);
+
+        // Truncate description if too long
+        let desc = item.description || '';
+        if (desc.length > 30) desc = desc.substring(0, 27) + '...';
+        drawText(desc, colX[1], y, smallSize);
+
+        drawText(item.packing || '-', colX[2], y, smallSize);
+        drawText(item.box || '-', colX[3], y, smallSize);
+        drawText(item.pc || '-', colX[4], y, smallSize);
+        drawText(item.qty || '-', colX[5], y, smallSize);
+        drawText(item.uom || '-', colX[6], y, smallSize);
+
+        const rate = item.rate || item.unit_price || '-';
+        drawText(rate.toString(), colX[7], y, smallSize);
+
+        const disc = item.disc || '0.00';
+        drawText(disc.toString(), colX[8], y, smallSize);
+
+        const amount = item.amount || item.total || '0';
+        drawText(amount.toString(), colX[9], y, smallSize);
+
+        // Long description
+        if (item.long_description) {
+          y -= 10;
+          drawText(
+            item.long_description,
+            colX[1],
+            y,
+            6,
+            font,
+            rgb(0.4, 0.4, 0.4),
+          );
+        }
+
+        y -= 15;
+        drawLine(50, y + 5, width - 50, y + 5, 0.5); // Light separator
+
+        // Calculate total
+        const val = parseFloat(amount.toString().replace(/,/g, ''));
+        if (!isNaN(val)) totalAmount += val;
+      }
+
+      y -= 10;
+      drawLine(50, y + 10, width - 50, y + 10); // End of table line
+
+      // --- Totals ---
+      const discount = parseFloat(header.discount || 0);
+      const finalTotal = totalAmount - discount;
+
+      const formatNum = n =>
+        n.toLocaleString('en-PK', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+
+      const labelX = 350;
+      const valueX = 450;
+
+      drawText('Sub-total:', labelX, y, fontSize, boldFont);
+      drawText(formatNum(totalAmount), valueX, y);
+      y -= 15;
+
+      drawText('Discount:', labelX, y, fontSize, boldFont);
+      drawText(formatNum(discount), valueX, y);
+      y -= 15;
+
+      drawText('QUOTATION TOTAL:', labelX, y, 12, boldFont);
+      drawText(formatNum(finalTotal), valueX, y, 12, boldFont);
+      y -= 50;
+
+      // --- Signatures ---
+      const sigY = y;
+      drawText('FAIZAN', 80, sigY);
+      drawLine(60, sigY - 5, 160, sigY - 5);
+      drawText('Prepared By', 85, sigY - 15, smallSize);
+
+      drawLine(width - 160, sigY - 5, width - 60, sigY - 5);
+      drawText('Approved By', width - 140, sigY - 15, smallSize);
+
+      // Save PDF
+      // Save PDF
+      // Save PDF
+      // Save PDF
+      const pdfBase64 = await pdfDoc.saveAsBase64();
+
+      // Save to CacheDir (better for sharing)
+      const fileName = `Quotation_${quoteNo}.pdf`;
+      const path = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/${fileName}`;
+
+      await ReactNativeBlobUtil.fs.writeFile(path, pdfBase64, 'base64');
+
+      console.log('PDF saved to:', path);
+      return path;
+    } catch (error) {
+      console.error('PDF Generation Error:', error);
+      throw error;
+    }
+  };
+
+  const handleShare = async item => {
+    try {
+      const id = item.order_no || item.trans_no;
+      setSharingId(id);
+
+      const formData = new FormData();
+      formData.append('trans_no', id);
+      formData.append('type', item.type);
+
+      const response = await fetch(`${API_URL}view_data.php`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      let headerData = null;
+      let detailsData = [];
+
+      if (result.status_header === 'true' && result.data_header?.length > 0) {
+        headerData = result.data_header[0];
+      }
+
+      if (result.status_detail === 'true' && result.data_detail?.length > 0) {
+        detailsData = result.data_detail;
+      }
+
+      if (!headerData) {
+        throw new Error('Could not fetch order details');
+      }
+
+      // Generate PDF
+      const filePath = await generatePDF(headerData, detailsData);
+
+      const shareUrl = `file://${filePath}`;
+      console.log('Sharing URL:', shareUrl);
+
+      const shareOptions = {
+        url: shareUrl,
+        type: 'application/pdf',
+        title: `Quotation ${headerData.trans_no}`,
+        message: `Quotation ${headerData.trans_no} - ${headerData.name}`,
+        subject: `Quotation ${headerData.trans_no}`,
+        failOnCancel: false,
+      };
+
+      await Share.open(shareOptions);
+
+      Toast.show({
+        type: 'success',
+        text1: 'Shared Successfully',
+        text2: 'PDF has been generated and shared',
+      });
+    } catch (error) {
+      console.error('Share error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Share Failed',
+        text2: error.message || 'Could not share inquiry',
+      });
+    } finally {
+      setSharingId(null);
+    }
+  };
+
   const CardItem = ({ item, index }) => (
     <View style={styles.cardContainer}>
       <View style={styles.card}>
-        {/* Header section with reference */}
         <View style={styles.cardHeader}>
           <View style={styles.referenceContainer}>
             <Ionicons
@@ -165,10 +466,8 @@ const InquiryScreen = ({ navigation }) => {
           />
         </View>
 
-        {/* Divider */}
         <View style={styles.divider} />
 
-        {/* Name section */}
         <View style={styles.row}>
           <Ionicons name="person" size={16} color={colors.textSecondary} />
           <Text style={styles.label}>Name:</Text>
@@ -177,21 +476,18 @@ const InquiryScreen = ({ navigation }) => {
           </Text>
         </View>
 
-        {/* Date section */}
         <View style={styles.row}>
           <Ionicons name="calendar" size={16} color={colors.textSecondary} />
           <Text style={styles.label}>Order Date:</Text>
           <Text style={styles.value}>{formatDate(item.ord_date)}</Text>
         </View>
 
-        {/* Total amount section with highlighted background */}
         <View style={[styles.row, styles.totalRow]}>
           <Ionicons name="cash" size={18} color={colors.primary} />
           <Text style={styles.label}>Total:</Text>
           <Text style={styles.totalValue}>{formatCurrency(item.total)}</Text>
         </View>
 
-        {/* Bottom actions */}
         <View style={styles.cardFooter}>
           <TouchableOpacity
             style={styles.detailsButton}
@@ -202,7 +498,7 @@ const InquiryScreen = ({ navigation }) => {
               })
             }
           >
-            <Text style={styles.detailsButtonText}>View Details</Text>
+            <Text style={styles.detailsButtonText}>Details</Text>
             <Ionicons name="arrow-forward" size={16} color={colors.primary} />
           </TouchableOpacity>
 
@@ -212,6 +508,25 @@ const InquiryScreen = ({ navigation }) => {
           >
             <Text style={styles.detailsButtonText}>Edit</Text>
             <Ionicons name="create-outline" size={16} color={colors.primary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.detailsButton, { marginLeft: 8 }]}
+            onPress={() => handleShare(item)}
+            disabled={sharingId === (item.order_no || item.trans_no)}
+          >
+            {sharingId === (item.order_no || item.trans_no) ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <>
+                <Text style={styles.detailsButtonText}>Share</Text>
+                <Ionicons
+                  name="share-social-outline"
+                  size={16}
+                  color={colors.primary}
+                />
+              </>
+            )}
           </TouchableOpacity>
         </View>
       </View>
